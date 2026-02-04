@@ -179,4 +179,38 @@
             }
         }
     }
+
+    .term-drag-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(var(--accent-color-rgb), 0.15);
+        border: 2px dashed var(--accent-color);
+        border-radius: 4px;
+        z-index: var(--zindex-termstickers);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+
+        .term-drag-overlay-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: var(--main-text-color);
+            font-size: 14px;
+            background-color: var(--block-bg-color);
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+            i {
+                font-size: 24px;
+                color: var(--accent-color);
+            }
+        }
+    }
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/jobcontroller"
 	"github.com/wavetermdev/waveterm/pkg/panichandler"
 	"github.com/wavetermdev/waveterm/pkg/remote"
+	"github.com/wavetermdev/waveterm/pkg/service/dirwatch"
 	"github.com/wavetermdev/waveterm/pkg/remote/conncontroller"
 	"github.com/wavetermdev/waveterm/pkg/remote/fileshare/wshfs"
 	"github.com/wavetermdev/waveterm/pkg/secretstore"
@@ -1506,4 +1507,21 @@ func (ws *WshServer) JobControllerDetachJobCommand(ctx context.Context, jobId st
 
 func (ws *WshServer) BlockJobStatusCommand(ctx context.Context, blockId string) (*wshrpc.BlockJobStatusData, error) {
 	return jobcontroller.GetBlockJobStatus(ctx, blockId)
+}
+
+func (ws *WshServer) DirWatchSubscribeCommand(ctx context.Context, data wshrpc.DirWatchData) error {
+	watcher := dirwatch.GetDirWatcher()
+	if watcher == nil {
+		return fmt.Errorf("directory watcher not available")
+	}
+	return watcher.Subscribe(data.DirPath, data.BlockId)
+}
+
+func (ws *WshServer) DirWatchUnsubscribeCommand(ctx context.Context, data wshrpc.DirWatchData) error {
+	watcher := dirwatch.GetDirWatcher()
+	if watcher == nil {
+		return nil
+	}
+	watcher.Unsubscribe(data.DirPath, data.BlockId)
+	return nil
 }

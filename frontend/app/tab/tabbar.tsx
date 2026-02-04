@@ -16,7 +16,6 @@ import { IconButton } from "../element/iconbutton";
 import { WorkspaceService } from "../store/services";
 import { Tab } from "./tab";
 import "./tabbar.scss";
-import { UpdateStatusBanner } from "./updatebanner";
 import { WorkspaceSwitcher } from "./workspaceswitcher";
 
 const TabDefaultWidth = 130;
@@ -188,7 +187,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const appMenuButtonRef = useRef<HTMLDivElement>(null);
     const tabWidthRef = useRef<number>(TabDefaultWidth);
     const scrollableRef = useRef<boolean>(false);
-    const updateStatusBannerRef = useRef<HTMLButtonElement>(null);
     const configErrorButtonRef = useRef<HTMLElement>(null);
     const prevAllLoadedRef = useRef<boolean>(false);
     const activeTabId = useAtomValue(atoms.staticTabId);
@@ -242,7 +240,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         const windowDragLeftWidth = draggerLeftRef.current.getBoundingClientRect().width;
         const windowDragRightWidth = draggerRightRef.current?.getBoundingClientRect().width ?? 0;
         const addBtnWidth = addBtnRef.current.getBoundingClientRect().width;
-        const updateStatusLabelWidth = updateStatusBannerRef.current?.getBoundingClientRect().width ?? 0;
         const configErrorWidth = configErrorButtonRef.current?.getBoundingClientRect().width ?? 0;
         const appMenuButtonWidth = appMenuButtonRef.current?.getBoundingClientRect().width ?? 0;
         const workspaceSwitcherWidth = workspaceSwitcherRef.current?.getBoundingClientRect().width ?? 0;
@@ -251,7 +248,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             windowDragLeftWidth +
             windowDragRightWidth +
             addBtnWidth +
-            updateStatusLabelWidth +
             configErrorWidth +
             appMenuButtonWidth +
             workspaceSwitcherWidth;
@@ -656,7 +652,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                     <i className="fa fa-ellipsis" />
                 </div>
             )}
-            <WaveAIButton />
             <WorkspaceSwitcher ref={workspaceSwitcherRef} />
             <div className="tab-bar" ref={tabBarRef} data-overlayscrollbars-initialize>
                 <div className="tabs-wrapper" ref={tabsWrapperRef} style={{ width: `${tabsWrapperWidth}px` }}>
@@ -683,7 +678,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
             </div>
             <IconButton className="add-tab" ref={addBtnRef} decl={addtabButtonDecl} />
             <div className="tab-bar-right">
-                <UpdateStatusBanner ref={updateStatusBannerRef} />
                 <ConfigErrorIcon buttonRef={configErrorButtonRef} />
                 <div
                     ref={draggerRightRef}

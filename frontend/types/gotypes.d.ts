@@ -811,6 +811,12 @@ declare global {
         modifiedtime: string;
     };
 
+    // wshrpc.DirWatchData
+    type DirWatchData = {
+        dirpath: string;
+        blockid: string;
+    };
+
     // vdom.DomRect
     type DomRect = {
         top: number;

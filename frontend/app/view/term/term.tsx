@@ -1,5 +1,6 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
+// File drag and drop support
 
 import { Block, SubBlock } from "@/app/block/block";
 import type { BlockNodeModel } from "@/app/block/blocktypes";
@@ -18,6 +19,8 @@ import clsx from "clsx";
 import debug from "debug";
 import * as jotai from "jotai";
 import * as React from "react";
+import { useDrop } from "react-dnd";
+import { quote as shellQuote } from "shell-quote";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
 import { computeTheme } from "./termutil";
@@ -170,6 +173,10 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     const [blockData] = WOS.useWaveObjectValue<Block>(WOS.makeORef("block", blockId));
     const termSettingsAtom = getSettingsPrefixAtom("term");
     const termSettings = jotai.useAtomValue(termSettingsAtom);
+
+    // Drag and drop state
+    const [isDragOver, setIsDragOver] = React.useState(false);
+    const [isReactDndDragOver, setIsReactDndDragOver] = React.useState(false);
     let termMode = blockData?.meta?.["term:mode"] ?? "term";
     if (termMode != "term" && termMode != "vdom") {
         termMode = "term";
@@ -364,6 +371,118 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
 
     const termBg = computeBgStyleFromMeta(blockData?.meta);
 
+    // Helper to extract file path from DraggedFile uri (wsh://conn/path format)
+    const extractPathFromUri = React.useCallback((uri: string): string => {
+        // uri format: "wsh://conn/path/to/file" or "wsh://local/path/to/file"
+        const match = uri.match(/^wsh:\/\/[^/]+(.+)$/);
+        return match ? match[1] : uri;
+    }, []);
+
+    // Send escaped file paths to terminal
+    const sendFilePathsToTerminal = React.useCallback(
+        (paths: string[]) => {
+            const escapedPaths = paths.map((p) => shellQuote([p])).join(" ");
+            model.sendDataToController(escapedPaths + " ");
+        },
+        [model]
+    );
+
+    // Check if dataTransfer contains native files
+    const hasNativeFiles = React.useCallback((dataTransfer: DataTransfer): boolean => {
+        return dataTransfer.types.includes("Files");
+    }, []);
+
+    // Handle native file drag over
+    const handleDragOver = React.useCallback(
+        (e: React.DragEvent) => {
+            if (!hasNativeFiles(e.dataTransfer)) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isDragOver) {
+                setIsDragOver(true);
+            }
+        },
+        [isDragOver, hasNativeFiles]
+    );
+
+    // Handle native file drag leave
+    const handleDragLeave = React.useCallback(
+        (e: React.DragEvent) => {
+            if (!hasNativeFiles(e.dataTransfer)) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            // Only set drag over to false if we're actually leaving the drop zone
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const x = e.clientX;
+            const y = e.clientY;
+            if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
+                setIsDragOver(false);
+            }
+        },
+        [hasNativeFiles]
+    );
+
+    // Handle native file drop
+    const handleDrop = React.useCallback(
+        (e: React.DragEvent) => {
+            // Check if this is a FILE_ITEM drag from react-dnd
+            if (!e.dataTransfer.files.length) {
+                return; // Let react-dnd handle FILE_ITEM drags
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(false);
+            const files = Array.from(e.dataTransfer.files);
+            // In Electron, File objects have a non-standard `path` property
+            const paths = files.map((f) => (f as File & { path?: string }).path).filter((p) => p);
+            if (paths.length > 0) {
+                sendFilePathsToTerminal(paths);
+            }
+        },
+        [sendFilePathsToTerminal]
+    );
+
+    // Handle FILE_ITEM drop from react-dnd (Wave directory preview)
+    const handleFileItemDrop = React.useCallback(
+        (draggedFile: DraggedFile) => {
+            const filePath = extractPathFromUri(draggedFile.uri);
+            sendFilePathsToTerminal([filePath]);
+        },
+        [extractPathFromUri, sendFilePathsToTerminal]
+    );
+
+    // useDrop hook for FILE_ITEM from react-dnd
+    const [{ isOver, canDrop }, drop] = useDrop(
+        () => ({
+            accept: "FILE_ITEM",
+            drop: handleFileItemDrop,
+            collect: (monitor) => ({
+                isOver: monitor.isOver(),
+                canDrop: monitor.canDrop(),
+            }),
+        }),
+        [handleFileItemDrop]
+    );
+
+    // Update drag over state for FILE_ITEM drags
+    React.useEffect(() => {
+        setIsReactDndDragOver(isOver && canDrop);
+    }, [isOver, canDrop]);
+
+    // Attach the drop ref to the container
+    React.useEffect(() => {
+        if (viewRef.current) {
+            drop(viewRef.current);
+        }
+    }, [drop]);
+
+    // Combined drag over state
+    const showDragOverlay = isDragOver || isReactDndDragOver;
+
     const handleContextMenu = React.useCallback(
         (e: React.MouseEvent<HTMLDivElement>) => {
             e.preventDefault();
@@ -375,7 +494,14 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
     );
 
     return (
-        <div className={clsx("view-term", "term-mode-" + termMode)} ref={viewRef} onContextMenu={handleContextMenu}>
+        <div
+            className={clsx("view-term", "term-mode-" + termMode)}
+            ref={viewRef}
+            onContextMenu={handleContextMenu}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+        >
             {termBg && <div className="absolute inset-0 z-0 pointer-events-none" style={termBg} />}
             <TermResyncHandler blockId={blockId} model={model} />
             <TermThemeUpdater blockId={blockId} model={model} termRef={model.termRef} />
@@ -391,6 +517,14 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
                 />
             </div>
             <Search {...searchProps} />
+            {showDragOverlay && (
+                <div className="term-drag-overlay">
+                    <div className="term-drag-overlay-content">
+                        <i className="fa-sharp fa-solid fa-file-import"></i>
+                        <span>Drop to insert file path</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -11,6 +11,7 @@ import {
 import { ConnectionButton } from "@/app/block/connectionbutton";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { getConnStatusAtom, recordTEvent, WOS } from "@/app/store/global";
+import { modalsModel } from "@/store/modalmodel";
 import { globalStore } from "@/app/store/jotaiStore";
 import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -64,7 +65,8 @@ function handleHeaderContextMenu(
     e: React.MouseEvent<HTMLDivElement>,
     blockId: string,
     viewModel: ViewModel,
-    nodeModel: NodeModel
+    nodeModel: NodeModel,
+    blockData: Block
 ) {
     e.preventDefault();
     e.stopPropagation();
@@ -77,6 +79,13 @@ function handleHeaderContextMenu(
             },
         },
         { type: "separator" },
+        {
+            label: "Rename Block",
+            click: () => {
+                const currentName = blockData?.meta?.["frame:title"] || "";
+                modalsModel.pushModal("RenameBlockModal", { blockId, currentName });
+            },
+        },
         {
             label: "Copy BlockId",
             click: () => {
@@ -141,9 +150,10 @@ type HeaderEndIconsProps = {
     viewModel: ViewModel;
     nodeModel: NodeModel;
     blockId: string;
+    blockData: Block;
 };
 
-const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndIconsProps) => {
+const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, blockData }: HeaderEndIconsProps) => {
     const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
     const magnified = jotai.useAtomValue(nodeModel.isMagnified);
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
@@ -159,7 +169,7 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId }: HeaderEndI
         elemtype: "iconbutton",
         icon: "cog",
         title: "Settings",
-        click: (e) => handleHeaderContextMenu(e, blockId, viewModel, nodeModel),
+        click: (e) => handleHeaderContextMenu(e, blockId, viewModel, nodeModel, blockData),
     };
     endIconsElem.push(<IconButton key="settings" decl={settingsDecl} className="block-frame-settings" />);
     if (ephemeral) {
@@ -237,7 +247,7 @@ const BlockFrame_Header = ({
             className={cn("block-frame-default-header", useTermHeader && "!pl-[2px]")}
             data-role="block-header"
             ref={dragHandleRef}
-            onContextMenu={(e) => handleHeaderContextMenu(e, nodeModel.blockId, viewModel, nodeModel)}
+            onContextMenu={(e) => handleHeaderContextMenu(e, nodeModel.blockId, viewModel, nodeModel, blockData)}
         >
             {!useTermHeader && (
                 <>
@@ -263,7 +273,7 @@ const BlockFrame_Header = ({
                 </div>
             )}
             <HeaderTextElems viewModel={viewModel} blockData={blockData} preview={preview} error={error} />
-            <HeaderEndIcons viewModel={viewModel} nodeModel={nodeModel} blockId={nodeModel.blockId} />
+            <HeaderEndIcons viewModel={viewModel} nodeModel={nodeModel} blockId={nodeModel.blockId} blockData={blockData} />
         </div>
     );
 };

@@ -107,6 +107,10 @@ type WshRpcInterface interface {
 	// eventrecv is special, it's handled internally by WshRpc with EventListener
 	EventRecvCommand(ctx context.Context, data wps.WaveEvent) error
 
+	// directory watching
+	DirWatchSubscribeCommand(ctx context.Context, data DirWatchData) error
+	DirWatchUnsubscribeCommand(ctx context.Context, data DirWatchData) error
+
 	// remotes
 	WshRpcRemoteFileInterface
 	RemoteStreamCpuDataCommand(ctx context.Context) chan RespOrErrorUnion[TimeSeriesData]
@@ -874,4 +878,9 @@ type BlockJobStatusData struct {
 	CmdExitTs     int64  `json:"cmdexitts,omitempty"`
 	CmdExitCode   *int   `json:"cmdexitcode,omitempty"`
 	CmdExitSignal string `json:"cmdexitsignal,omitempty"`
+}
+
+type DirWatchData struct {
+	DirPath string `json:"dirpath"` // path to watch
+	BlockId string `json:"blockid"` // block id for scoping the event
 }

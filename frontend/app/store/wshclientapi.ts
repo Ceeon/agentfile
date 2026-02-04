@@ -167,6 +167,16 @@ class RpcApiType {
         return client.wshRpcCall("deletesubblock", data, opts);
     }
 
+    // command "dirwatchsubscribe" [call]
+    DirWatchSubscribeCommand(client: WshClient, data: DirWatchData, opts?: RpcOpts): Promise<void> {
+        return client.wshRpcCall("dirwatchsubscribe", data, opts);
+    }
+
+    // command "dirwatchunsubscribe" [call]
+    DirWatchUnsubscribeCommand(client: WshClient, data: DirWatchData, opts?: RpcOpts): Promise<void> {
+        return client.wshRpcCall("dirwatchunsubscribe", data, opts);
+    }
+
     // command "dismisswshfail" [call]
     DismissWshFailCommand(client: WshClient, data: string, opts?: RpcOpts): Promise<void> {
         return client.wshRpcCall("dismisswshfail", data, opts);

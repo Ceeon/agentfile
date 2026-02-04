@@ -208,6 +208,18 @@ func DeleteSubBlockCommand(w *wshutil.WshRpc, data wshrpc.CommandDeleteBlockData
 	return err
 }
 
+// command "dirwatchsubscribe", wshserver.DirWatchSubscribeCommand
+func DirWatchSubscribeCommand(w *wshutil.WshRpc, data wshrpc.DirWatchData, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "dirwatchsubscribe", data, opts)
+	return err
+}
+
+// command "dirwatchunsubscribe", wshserver.DirWatchUnsubscribeCommand
+func DirWatchUnsubscribeCommand(w *wshutil.WshRpc, data wshrpc.DirWatchData, opts *wshrpc.RpcOpts) error {
+	_, err := sendRpcRequestCallHelper[any](w, "dirwatchunsubscribe", data, opts)
+	return err
+}
+
 // command "dismisswshfail", wshserver.DismissWshFailCommand
 func DismissWshFailCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "dismisswshfail", data, opts)

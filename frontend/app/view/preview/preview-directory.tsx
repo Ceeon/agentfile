@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { atoms, getApi, globalStore } from "@/app/store/global";
+import { atoms, createBlock, getApi, globalStore } from "@/app/store/global";
+import { waveEventSubscribe } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { checkKeyPressed, isCharacterKeyEvent } from "@/util/keyutil";
@@ -11,31 +12,15 @@ import { addOpenMenuItems } from "@/util/previewutil";
 import { fireAndForget } from "@/util/util";
 import { formatRemoteUri } from "@/util/waveutil";
 import { offset, useDismiss, useFloating, useInteractions } from "@floating-ui/react";
-import {
-    Header,
-    Row,
-    RowData,
-    Table,
-    createColumnHelper,
-    flexRender,
-    getCoreRowModel,
-    getSortedRowModel,
-    useReactTable,
-} from "@tanstack/react-table";
 import clsx from "clsx";
 import { PrimitiveAtom, atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { OverlayScrollbarsComponent, OverlayScrollbarsComponentRef } from "overlayscrollbars-react";
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import { quote as shellQuote } from "shell-quote";
-import { debounce } from "throttle-debounce";
 import "./directorypreview.scss";
 import { EntryManagerOverlay, EntryManagerOverlayProps, EntryManagerType } from "./entry-manager";
 import {
-    cleanMimetype,
-    getBestUnit,
-    getLastModifiedTime,
-    getSortIcon,
     handleFileDelete,
     handleRename,
     isIconValid,
@@ -46,41 +31,15 @@ import { type PreviewModel } from "./preview-model";
 
 const PageJumpSize = 20;
 
-interface DirectoryTableHeaderCellProps {
-    header: Header<FileInfo, unknown>;
+// Extended FileInfo with tree-specific properties
+interface TreeFileInfo extends FileInfo {
+    depth: number;
+    children?: TreeFileInfo[];
+    isExpanded?: boolean;
+    isLoading?: boolean;
 }
 
-function DirectoryTableHeaderCell({ header }: DirectoryTableHeaderCellProps) {
-    return (
-        <div
-            className="dir-table-head-cell"
-            key={header.id}
-            style={{ width: `calc(var(--header-${header.id}-size) * 1px)` }}
-        >
-            <div className="dir-table-head-cell-content" onClick={() => header.column.toggleSorting()}>
-                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                {getSortIcon(header.column.getIsSorted())}
-            </div>
-            <div className="dir-table-head-resize-box">
-                <div
-                    className="dir-table-head-resize"
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                />
-            </div>
-        </div>
-    );
-}
-
-declare module "@tanstack/react-table" {
-    interface TableMeta<TData extends RowData> {
-        updateName: (path: string, isDir: boolean) => void;
-        newFile: () => void;
-        newDirectory: () => void;
-    }
-}
-
-interface DirectoryTableProps {
+interface DirectoryTreeProps {
     model: PreviewModel;
     data: FileInfo[];
     search: string;
@@ -92,11 +51,10 @@ interface DirectoryTableProps {
     entryManagerOverlayPropsAtom: PrimitiveAtom<EntryManagerOverlayProps>;
     newFile: () => void;
     newDirectory: () => void;
+    onFileDrop: (draggedFile: DraggedFile, targetPath: string) => Promise<void>;
 }
 
-const columnHelper = createColumnHelper<FileInfo>();
-
-function DirectoryTable({
+function DirectoryTree({
     model,
     data,
     search,
@@ -108,10 +66,31 @@ function DirectoryTable({
     entryManagerOverlayPropsAtom,
     newFile,
     newDirectory,
-}: DirectoryTableProps) {
+    onFileDrop,
+}: DirectoryTreeProps) {
     const searchActive = useAtomValue(model.directorySearchActive);
     const fullConfig = useAtomValue(atoms.fullConfigAtom);
     const setErrorMsg = useSetAtom(model.errorMsgAtom);
+    const conn = useAtomValue(model.connection);
+    const osRef = useRef<OverlayScrollbarsComponentRef>(null);
+    const bodyRef = useRef<HTMLDivElement>(null);
+
+    // Track expanded directories
+    const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+    // Track loaded children for each directory
+    const [childrenCache, setChildrenCache] = useState<Map<string, FileInfo[]>>(new Map());
+    // Track loading state
+    const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
+
+    // Listen to refreshVersion and clear cache when it changes
+    const refreshVersion = useAtomValue(model.refreshVersion);
+    useEffect(() => {
+        // Clear children cache to force reload of expanded directories
+        setChildrenCache(new Map());
+    }, [refreshVersion]);
+
+    const setEntryManagerProps = useSetAtom(entryManagerOverlayPropsAtom);
+
     const getIconFromMimeType = useCallback(
         (mimeType: string): string => {
             while (mimeType.length > 0) {
@@ -125,67 +104,11 @@ function DirectoryTable({
         },
         [fullConfig.mimetypes]
     );
+
     const getIconColor = useCallback(
         (mimeType: string): string => fullConfig.mimetypes?.[mimeType]?.color ?? "inherit",
         [fullConfig.mimetypes]
     );
-    const columns = useMemo(
-        () => [
-            columnHelper.accessor("mimetype", {
-                cell: (info) => (
-                    <i
-                        className={getIconFromMimeType(info.getValue() ?? "")}
-                        style={{ color: getIconColor(info.getValue() ?? "") }}
-                    ></i>
-                ),
-                header: () => <span></span>,
-                id: "logo",
-                size: 25,
-                enableSorting: false,
-            }),
-            columnHelper.accessor("name", {
-                cell: (info) => <span className="dir-table-name ellipsis">{info.getValue()}</span>,
-                header: () => <span className="dir-table-head-name">Name</span>,
-                sortingFn: "alphanumeric",
-                size: 200,
-                minSize: 90,
-            }),
-            columnHelper.accessor("modestr", {
-                cell: (info) => <span className="dir-table-modestr">{info.getValue()}</span>,
-                header: () => <span>Perm</span>,
-                size: 91,
-                minSize: 90,
-                sortingFn: "alphanumeric",
-            }),
-            columnHelper.accessor("modtime", {
-                cell: (info) => (
-                    <span className="dir-table-lastmod">{getLastModifiedTime(info.getValue(), info.column)}</span>
-                ),
-                header: () => <span>Last Modified</span>,
-                size: 91,
-                minSize: 65,
-                sortingFn: "datetime",
-            }),
-            columnHelper.accessor("size", {
-                cell: (info) => <span className="dir-table-size">{getBestUnit(info.getValue())}</span>,
-                header: () => <span className="dir-table-head-size">Size</span>,
-                size: 55,
-                minSize: 50,
-                sortingFn: "auto",
-            }),
-            columnHelper.accessor("mimetype", {
-                cell: (info) => <span className="dir-table-type ellipsis">{cleanMimetype(info.getValue() ?? "")}</span>,
-                header: () => <span className="dir-table-head-type">Type</span>,
-                size: 97,
-                minSize: 97,
-                sortingFn: "alphanumeric",
-            }),
-            columnHelper.accessor("path", {}),
-        ],
-        [fullConfig]
-    );
-
-    const setEntryManagerProps = useSetAtom(entryManagerOverlayPropsAtom);
 
     const updateName = useCallback(
         (path: string, isDir: boolean) => {
@@ -198,7 +121,6 @@ function DirectoryTable({
                     if (newName !== fileName) {
                         const lastInstance = path.lastIndexOf(fileName);
                         newPath = path.substring(0, lastInstance) + newName;
-                        console.log(`replacing ${fileName} with ${newName}: ${path}`);
                         handleRename(model, path, newPath, isDir, setErrorMsg);
                     }
                     setEntryManagerProps(undefined);
@@ -208,130 +130,114 @@ function DirectoryTable({
         [model, setErrorMsg]
     );
 
-    const table = useReactTable({
-        data,
-        columns,
-        columnResizeMode: "onChange",
-        getSortedRowModel: getSortedRowModel(),
-        getCoreRowModel: getCoreRowModel(),
+    // Load children for a directory
+    const loadChildren = useCallback(
+        async (dirPath: string) => {
+            if (childrenCache.has(dirPath) || loadingPaths.has(dirPath)) {
+                return;
+            }
 
-        initialState: {
-            sorting: [
-                {
-                    id: "name",
-                    desc: false,
-                },
-            ],
-            columnVisibility: {
-                path: false,
-            },
+            setLoadingPaths((prev) => new Set(prev).add(dirPath));
+
+            try {
+                const file = await RpcApi.FileReadCommand(
+                    TabRpcClient,
+                    {
+                        info: {
+                            path: await model.formatRemoteUri(dirPath, globalStore.get),
+                        },
+                    },
+                    null
+                );
+                const entries = file.entries ?? [];
+                setChildrenCache((prev) => new Map(prev).set(dirPath, entries));
+            } catch (e) {
+                console.error("Failed to load directory:", e);
+            } finally {
+                setLoadingPaths((prev) => {
+                    const next = new Set(prev);
+                    next.delete(dirPath);
+                    return next;
+                });
+            }
         },
-        enableMultiSort: false,
-        enableSortingRemoval: false,
-        meta: {
-            updateName,
-            newFile,
-            newDirectory,
-        },
-    });
-    const sortingState = table.getState().sorting;
-    useEffect(() => {
-        const allRows = table.getRowModel()?.flatRows || [];
-        setSelectedPath((allRows[focusIndex]?.getValue("path") as string) ?? null);
-    }, [focusIndex, data, setSelectedPath, sortingState]);
-
-    const columnSizeVars = useMemo(() => {
-        const headers = table.getFlatHeaders();
-        const colSizes: { [key: string]: number } = {};
-        for (let i = 0; i < headers.length; i++) {
-            const header = headers[i]!;
-            colSizes[`--header-${header.id}-size`] = header.getSize();
-            colSizes[`--col-${header.column.id}-size`] = header.column.getSize();
-        }
-        return colSizes;
-    }, [table.getState().columnSizingInfo]);
-
-    const osRef = useRef<OverlayScrollbarsComponentRef>(null);
-    const bodyRef = useRef<HTMLDivElement>(null);
-    const [scrollHeight, setScrollHeight] = useState(0);
-
-    const onScroll = useCallback(
-        debounce(2, () => {
-            setScrollHeight(osRef.current.osInstance().elements().viewport.scrollTop);
-        }),
-        []
+        [model, childrenCache, loadingPaths]
     );
 
-    const TableComponent = table.getState().columnSizingInfo.isResizingColumn ? MemoizedTableBody : TableBody;
+    // Toggle directory expansion
+    const toggleExpand = useCallback(
+        (path: string, isDir: boolean) => {
+            if (!isDir) return;
 
-    return (
-        <OverlayScrollbarsComponent
-            options={{ scrollbars: { autoHide: "leave" } }}
-            events={{ scroll: onScroll }}
-            className="dir-table"
-            style={{ ...columnSizeVars }}
-            ref={osRef}
-            data-scroll-height={scrollHeight}
-        >
-            <div className="dir-table-head">
-                {table.getHeaderGroups().map((headerGroup) => (
-                    <div className="dir-table-head-row" key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                            <DirectoryTableHeaderCell key={header.id} header={header} />
-                        ))}
-                    </div>
-                ))}
-            </div>
-            <TableComponent
-                bodyRef={bodyRef}
-                model={model}
-                data={data}
-                table={table}
-                search={search}
-                focusIndex={focusIndex}
-                setFocusIndex={setFocusIndex}
-                setSearch={setSearch}
-                setSelectedPath={setSelectedPath}
-                setRefreshVersion={setRefreshVersion}
-                osRef={osRef.current}
-            />
-        </OverlayScrollbarsComponent>
+            setExpandedPaths((prev) => {
+                const next = new Set(prev);
+                if (next.has(path)) {
+                    next.delete(path);
+                } else {
+                    next.add(path);
+                    loadChildren(path);
+                }
+                return next;
+            });
+        },
+        [loadChildren]
     );
-}
 
-interface TableBodyProps {
-    bodyRef: React.RefObject<HTMLDivElement>;
-    model: PreviewModel;
-    data: Array<FileInfo>;
-    table: Table<FileInfo>;
-    search: string;
-    focusIndex: number;
-    setFocusIndex: (_: number) => void;
-    setSearch: (_: string) => void;
-    setSelectedPath: (_: string) => void;
-    setRefreshVersion: React.Dispatch<React.SetStateAction<number>>;
-    osRef: OverlayScrollbarsComponentRef;
-}
+    // Sort files: directories first, then alphabetically
+    const sortFiles = useCallback((files: FileInfo[]): FileInfo[] => {
+        return [...files].sort((a, b) => {
+            // ".." always first
+            if (a.name === "..") return -1;
+            if (b.name === "..") return 1;
+            // Directories before files
+            if (a.isdir && !b.isdir) return -1;
+            if (!a.isdir && b.isdir) return 1;
+            // Alphabetical
+            return (a.name ?? "").localeCompare(b.name ?? "");
+        });
+    }, []);
 
-function TableBody({
-    bodyRef,
-    model,
-    table,
-    search,
-    focusIndex,
-    setFocusIndex,
-    setSearch,
-    setRefreshVersion,
-    osRef,
-}: TableBodyProps) {
-    const searchActive = useAtomValue(model.directorySearchActive);
-    const dummyLineRef = useRef<HTMLDivElement>(null);
-    const warningBoxRef = useRef<HTMLDivElement>(null);
-    const conn = useAtomValue(model.connection);
-    const setErrorMsg = useSetAtom(model.errorMsgAtom);
+    // Build flat list of visible items for rendering
+    const flattenTree = useCallback(
+        (items: FileInfo[], depth: number = 0): TreeFileInfo[] => {
+            const result: TreeFileInfo[] = [];
+            const sorted = sortFiles(items);
 
+            for (const item of sorted) {
+                const isExpanded = expandedPaths.has(item.path);
+                const children = childrenCache.get(item.path);
+                const hasChildren = children && children.length > 0;
+
+                const treeItem: TreeFileInfo = {
+                    ...item,
+                    depth,
+                    // Only show as expanded if we actually have children to display
+                    isExpanded: isExpanded && hasChildren,
+                    isLoading: loadingPaths.has(item.path),
+                };
+                result.push(treeItem);
+
+                // Add children if expanded and we have them
+                if (item.isdir && isExpanded && hasChildren) {
+                    result.push(...flattenTree(children, depth + 1));
+                }
+            }
+
+            return result;
+        },
+        [expandedPaths, childrenCache, loadingPaths, sortFiles]
+    );
+
+    const flatData = useMemo(() => flattenTree(data), [data, flattenTree]);
+
+    // Update selected path when focus changes
     useEffect(() => {
-        if (focusIndex === null || !bodyRef.current || !osRef) {
+        setSelectedPath(flatData[focusIndex]?.path ?? null);
+    }, [focusIndex, flatData, setSelectedPath]);
+
+    // Scroll focused item into view
+    useEffect(() => {
+        if (focusIndex === null || !bodyRef.current || !osRef.current) {
             return;
         }
 
@@ -340,7 +246,7 @@ function TableBody({
             return;
         }
 
-        const viewport = osRef.osInstance().elements().viewport;
+        const viewport = osRef.current.osInstance().elements().viewport;
         const viewportHeight = viewport.offsetHeight;
         const rowRect = rowElement.getBoundingClientRect();
         const parentRect = viewport.getBoundingClientRect();
@@ -349,14 +255,10 @@ function TableBody({
         const rowBottomRelativeToViewport = rowRect.bottom - parentRect.top + viewport.scrollTop;
 
         if (rowTopRelativeToViewport - 30 < viewportScrollTop) {
-            // Row is above the visible area
             let topVal = rowTopRelativeToViewport - 30;
-            if (topVal < 0) {
-                topVal = 0;
-            }
+            if (topVal < 0) topVal = 0;
             viewport.scrollTo({ top: topVal });
         } else if (rowBottomRelativeToViewport + 5 > viewportScrollTop + viewportHeight) {
-            // Row is below the visible area
             const topVal = rowBottomRelativeToViewport - viewportHeight + 5;
             viewport.scrollTo({ top: topVal });
         }
@@ -366,198 +268,269 @@ function TableBody({
         async (e: any, finfo: FileInfo) => {
             e.preventDefault();
             e.stopPropagation();
-            if (finfo == null) {
-                return;
-            }
+            if (finfo == null) return;
+
             const fileName = finfo.path.split("/").pop();
-            const menu: ContextMenuItem[] = [
-                {
-                    label: "New File",
+            const menu: ContextMenuItem[] = [];
+
+            // Add "Open Folder" option for directories
+            if (finfo.isdir) {
+                menu.push({
+                    label: "Open Folder",
                     click: () => {
-                        table.options.meta.newFile();
+                        model.goHistory(finfo.path);
+                        globalStore.set(model.directorySearchActive, false);
                     },
-                },
-                {
-                    label: "New Folder",
-                    click: () => {
-                        table.options.meta.newDirectory();
-                    },
-                },
-                {
-                    label: "Rename",
-                    click: () => {
-                        table.options.meta.updateName(finfo.path, finfo.isdir);
-                    },
-                },
-                {
-                    type: "separator",
-                },
-                {
-                    label: "Copy File Name",
-                    click: () => fireAndForget(() => navigator.clipboard.writeText(fileName)),
-                },
-                {
-                    label: "Copy Full File Name",
-                    click: () => fireAndForget(() => navigator.clipboard.writeText(finfo.path)),
-                },
-                {
-                    label: "Copy File Name (Shell Quoted)",
-                    click: () => fireAndForget(() => navigator.clipboard.writeText(shellQuote([fileName]))),
-                },
-                {
-                    label: "Copy Full File Name (Shell Quoted)",
-                    click: () => fireAndForget(() => navigator.clipboard.writeText(shellQuote([finfo.path]))),
-                },
-            ];
+                });
+                menu.push({ type: "separator" });
+            }
+
+            menu.push(
+                { label: "New File", click: () => newFile() },
+                { label: "New Folder", click: () => newDirectory() },
+                { label: "Rename", click: () => updateName(finfo.path, finfo.isdir) },
+                { type: "separator" },
+                { label: "Copy File Name", click: () => fireAndForget(() => navigator.clipboard.writeText(fileName)) },
+                { label: "Copy Full File Name", click: () => fireAndForget(() => navigator.clipboard.writeText(finfo.path)) },
+                { label: "Copy File Name (Shell Quoted)", click: () => fireAndForget(() => navigator.clipboard.writeText(shellQuote([fileName]))) },
+                { label: "Copy Full File Name (Shell Quoted)", click: () => fireAndForget(() => navigator.clipboard.writeText(shellQuote([finfo.path]))) },
+            );
             addOpenMenuItems(menu, conn, finfo);
             menu.push(
-                {
-                    type: "separator",
-                },
-                {
-                    label: "Delete",
-                    click: () => handleFileDelete(model, finfo.path, false, setErrorMsg),
-                }
+                { type: "separator" },
+                { label: "Delete", click: () => handleFileDelete(model, finfo.path, false, setErrorMsg) }
             );
             ContextMenuModel.showContextMenu(menu, e);
         },
-        [setRefreshVersion, conn]
+        [conn, model, newFile, newDirectory, updateName, setErrorMsg]
     );
 
-    const allRows = table.getRowModel().flatRows;
-    const dotdotRow = allRows.find((row) => row.getValue("name") === "..");
-    const otherRows = allRows.filter((row) => row.getValue("name") !== "..");
-
     return (
-        <div className="dir-table-body" ref={bodyRef}>
-            {(searchActive || search !== "") && (
-                <div className="flex rounded-[3px] py-1 px-2 bg-warning text-black" ref={warningBoxRef}>
-                    <span>{search === "" ? "Type to search (Esc to cancel)" : `Searching for "${search}"`}</span>
-                    <div
-                        className="ml-auto bg-transparent flex justify-center items-center flex-col p-0.5 rounded-md hover:bg-hoverbg focus:bg-hoverbg focus-within:bg-hoverbg cursor-pointer"
-                        onClick={() => {
-                            setSearch("");
-                            globalStore.set(model.directorySearchActive, false);
-                        }}
-                    >
-                        <i className="fa-solid fa-xmark" />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={() => {}}
-                            className="w-0 h-0 opacity-0 p-0 border-none pointer-events-none"
-                        />
+        <OverlayScrollbarsComponent
+            options={{ scrollbars: { autoHide: "leave" } }}
+            className="dir-tree"
+            ref={osRef}
+        >
+            <div className="dir-tree-body" ref={bodyRef}>
+                {(searchActive || search !== "") && (
+                    <div className="dir-tree-search-bar">
+                        <span>{search === "" ? "Type to search (Esc to cancel)" : `Searching for "${search}"`}</span>
+                        <div
+                            className="dir-tree-search-close"
+                            onClick={() => {
+                                setSearch("");
+                                globalStore.set(model.directorySearchActive, false);
+                            }}
+                        >
+                            <i className="fa-solid fa-xmark" />
+                        </div>
                     </div>
-                </div>
-            )}
-            <div className="dir-table-body-scroll-box">
-                <div className="dummy dir-table-body-row" ref={dummyLineRef}>
-                    <div className="dir-table-body-cell">dummy-data</div>
-                </div>
-                {dotdotRow && (
-                    <TableRow
-                        model={model}
-                        row={dotdotRow}
-                        focusIndex={focusIndex}
-                        setFocusIndex={setFocusIndex}
-                        setSearch={setSearch}
-                        idx={0}
-                        handleFileContextMenu={handleFileContextMenu}
-                        key="dotdot"
-                    />
                 )}
-                {otherRows.map((row, idx) => (
-                    <TableRow
+                {flatData.map((item, idx) => (
+                    <TreeRow
+                        key={item.path + "-" + idx}
                         model={model}
-                        row={row}
+                        item={item}
+                        idx={idx}
                         focusIndex={focusIndex}
                         setFocusIndex={setFocusIndex}
                         setSearch={setSearch}
-                        idx={dotdotRow ? idx + 1 : idx}
+                        toggleExpand={toggleExpand}
+                        getIconFromMimeType={getIconFromMimeType}
+                        getIconColor={getIconColor}
                         handleFileContextMenu={handleFileContextMenu}
-                        key={idx}
+                        onFileDrop={onFileDrop}
                     />
                 ))}
             </div>
-        </div>
+        </OverlayScrollbarsComponent>
     );
 }
 
-type TableRowProps = {
+interface TreeRowProps {
     model: PreviewModel;
-    row: Row<FileInfo>;
+    item: TreeFileInfo;
+    idx: number;
     focusIndex: number;
     setFocusIndex: (_: number) => void;
     setSearch: (_: string) => void;
-    idx: number;
+    toggleExpand: (path: string, isDir: boolean) => void;
+    getIconFromMimeType: (mimeType: string) => string;
+    getIconColor: (mimeType: string) => string;
     handleFileContextMenu: (e: any, finfo: FileInfo) => Promise<void>;
-};
+    onFileDrop: (draggedFile: DraggedFile, targetPath: string) => Promise<void>;
+}
 
-const TableRow = React.forwardRef(function ({
+function TreeRow({
     model,
-    row,
+    item,
+    idx,
     focusIndex,
     setFocusIndex,
     setSearch,
-    idx,
+    toggleExpand,
+    getIconFromMimeType,
+    getIconColor,
     handleFileContextMenu,
-}: TableRowProps) {
+    onFileDrop,
+}: TreeRowProps) {
     const dirPath = useAtomValue(model.statFilePath);
     const connection = useAtomValue(model.connection);
 
     const dragItem: DraggedFile = {
-        relName: row.getValue("name") as string,
+        relName: item.name,
         absParent: dirPath,
-        uri: formatRemoteUri(row.getValue("path") as string, connection),
-        isDir: row.original.isdir,
+        uri: formatRemoteUri(item.path, connection),
+        isDir: item.isdir,
     };
-    const [_, drag] = useDrag(
+
+    const [{ isDragging }, drag] = useDrag(
         () => ({
             type: "FILE_ITEM",
-            canDrag: true,
+            canDrag: item.name !== "..",
             item: () => dragItem,
+            collect: (monitor) => ({
+                isDragging: monitor.isDragging(),
+            }),
         }),
-        [dragItem]
+        [dragItem, item.name]
     );
 
-    const dragRef = useCallback(
+    const [{ isOver, canDrop }, drop] = useDrop(
+        () => ({
+            accept: "FILE_ITEM",
+            canDrop: (draggedItem: DraggedFile) => {
+                // Can only drop on directories
+                if (!item.isdir) return false;
+                // Can't drop on ".."
+                if (item.name === "..") return false;
+                // Can't drop on itself
+                if (draggedItem.uri === formatRemoteUri(item.path, connection)) return false;
+                // Can't drop into its own parent (already there)
+                if (draggedItem.absParent === item.path) return false;
+                return true;
+            },
+            drop: async (draggedFile: DraggedFile) => {
+                await onFileDrop(draggedFile, item.path);
+            },
+            collect: (monitor) => ({
+                isOver: monitor.isOver(),
+                canDrop: monitor.canDrop(),
+            }),
+        }),
+        [item, connection, onFileDrop]
+    );
+
+    const dragDropRef = useCallback(
         (node: HTMLDivElement | null) => {
             drag(node);
+            drop(node);
         },
-        [drag]
+        [drag, drop]
     );
+
+    const handleClick = useCallback(
+        (e: React.MouseEvent) => {
+            setFocusIndex(idx);
+        },
+        [idx, setFocusIndex]
+    );
+
+    const handleDoubleClick = useCallback(() => {
+        if (item.isdir && item.name !== "..") {
+            // Double-click on directory: expand/collapse
+            toggleExpand(item.path, true);
+        } else if (item.name === "..") {
+            // Double-click on "..": navigate to parent
+            model.goHistory(item.path);
+            setSearch("");
+            globalStore.set(model.directorySearchActive, false);
+        } else {
+            // Double-click on file: open in new block
+            fireAndForget(async () => {
+                const blockDef: BlockDef = {
+                    meta: {
+                        view: "preview",
+                        file: item.path,
+                        connection: connection,
+                    },
+                };
+                await createBlock(blockDef);
+            });
+        }
+    }, [item, model, setSearch, toggleExpand, connection]);
+
+    const handleChevronClick = useCallback(
+        (e: React.MouseEvent) => {
+            e.stopPropagation();
+            toggleExpand(item.path, item.isdir);
+        },
+        [item, toggleExpand]
+    );
+
+    // Render chevron for directories
+    const renderChevron = () => {
+        if (!item.isdir || item.name === "..") {
+            return <span className="dir-tree-chevron-placeholder" />;
+        }
+
+        if (item.isLoading) {
+            return <i className="fa fa-spinner fa-spin dir-tree-chevron" />;
+        }
+
+        return (
+            <i
+                className={clsx("fa dir-tree-chevron", {
+                    "fa-chevron-right": !item.isExpanded,
+                    "fa-chevron-down": item.isExpanded,
+                })}
+                onClick={handleChevronClick}
+            />
+        );
+    };
+
+    // Render file/folder icon
+    const renderIcon = () => {
+        if (item.isdir) {
+            return (
+                <i
+                    className={clsx("fa fa-fw", {
+                        "fa-folder-open": item.isExpanded,
+                        "fa-folder": !item.isExpanded,
+                    })}
+                    style={{ color: "#dcb67a" }}
+                />
+            );
+        }
+        return (
+            <i
+                className={getIconFromMimeType(item.mimetype ?? "")}
+                style={{ color: getIconColor(item.mimetype ?? "") }}
+            />
+        );
+    };
 
     return (
         <div
-            className={clsx("dir-table-body-row", { focused: focusIndex === idx })}
+            className={clsx("dir-tree-row", {
+                focused: focusIndex === idx,
+                dragging: isDragging,
+                "drop-target": isOver && canDrop,
+                "drop-not-allowed": isOver && !canDrop,
+            })}
             data-rowindex={idx}
-            onDoubleClick={() => {
-                const newFileName = row.getValue("path") as string;
-                model.goHistory(newFileName);
-                setSearch("");
-                globalStore.set(model.directorySearchActive, false);
-            }}
-            onClick={() => setFocusIndex(idx)}
-            onContextMenu={(e) => handleFileContextMenu(e, row.original)}
-            ref={dragRef}
+            style={{ paddingLeft: `${8 + item.depth * 16}px` }}
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
+            onContextMenu={(e) => handleFileContextMenu(e, item)}
+            ref={dragDropRef}
         >
-            {row.getVisibleCells().map((cell) => (
-                <div
-                    className={clsx("dir-table-body-cell", "col-" + cell.column.id)}
-                    key={cell.id}
-                    style={{ width: `calc(var(--col-${cell.column.id}-size) * 1px)` }}
-                >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </div>
-            ))}
+            {renderChevron()}
+            {renderIcon()}
+            <span className="dir-tree-name">{item.name}</span>
         </div>
     );
-});
-
-const MemoizedTableBody = React.memo(
-    TableBody,
-    (prev, next) => prev.table.options.data == next.table.options.data
-) as typeof TableBody;
+}
 
 interface DirectoryPreviewProps {
     model: PreviewModel;
@@ -584,6 +557,51 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
             model.refreshCallback = null;
         };
     }, [setRefreshVersion]);
+
+    // Subscribe to directory watch events for automatic refresh
+    useEffect(() => {
+        const blockId = blockData?.oid;
+        if (!dirPath || !blockId || conn) {
+            // Only watch local directories for now
+            return;
+        }
+
+        // Subscribe to directory watch
+        fireAndForget(async () => {
+            try {
+                await RpcApi.DirWatchSubscribeCommand(TabRpcClient, {
+                    dirpath: dirPath,
+                    blockid: blockId,
+                });
+            } catch (e) {
+                console.log("Failed to subscribe to directory watch:", e);
+            }
+        });
+
+        // Listen for directory change events
+        const unsub = waveEventSubscribe({
+            eventType: "dirwatch",
+            scope: `block:${blockId}`,
+            handler: () => {
+                setRefreshVersion((v) => v + 1);
+            },
+        });
+
+        return () => {
+            unsub();
+            // Unsubscribe from directory watch
+            fireAndForget(async () => {
+                try {
+                    await RpcApi.DirWatchUnsubscribeCommand(TabRpcClient, {
+                        dirpath: dirPath,
+                        blockid: blockId,
+                    });
+                } catch (e) {
+                    // Ignore errors on cleanup
+                }
+            });
+        };
+    }, [dirPath, blockData?.oid, conn, setRefreshVersion]);
 
     useEffect(
         () =>
@@ -760,6 +778,65 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         [model.refreshCallback]
     );
 
+    const handleDropMove = useCallback(
+        async (data: CommandFileCopyData, isDir: boolean) => {
+            try {
+                await RpcApi.FileMoveCommand(TabRpcClient, data, { timeout: data.opts.timeout });
+            } catch (e) {
+                console.warn("Move failed:", e);
+                const moveError = `${e}`;
+                const alreadyExists = moveError.includes("already exists");
+                const allowRetry =
+                    alreadyExists || moveError.includes(overwriteError) || moveError.includes(mergeError);
+                let errorMsg: ErrorMsg;
+                if (allowRetry) {
+                    errorMsg = {
+                        status: "Confirm Overwrite",
+                        text: "Target already exists. Overwrite it?",
+                        level: "warning",
+                        buttons: [
+                            {
+                                text: "Overwrite",
+                                onClick: async () => {
+                                    data.opts.overwrite = true;
+                                    await handleDropMove(data, isDir);
+                                },
+                            },
+                        ],
+                    };
+                } else {
+                    errorMsg = {
+                        status: "Move Failed",
+                        text: moveError,
+                        level: "error",
+                    };
+                }
+                setErrorMsg(errorMsg);
+            }
+            model.refreshCallback();
+        },
+        [model.refreshCallback]
+    );
+
+    const onFileDrop = useCallback(
+        async (draggedFile: DraggedFile, targetPath: string) => {
+            const timeoutYear = 31536000000; // one year
+            const opts: FileCopyOpts = {
+                timeout: timeoutYear,
+            };
+            // Target path should be: targetFolder + sourceFileName
+            const fullTargetPath = targetPath + "/" + draggedFile.relName;
+            const desturi = await model.formatRemoteUri(fullTargetPath, globalStore.get);
+            const data: CommandFileCopyData = {
+                srcuri: draggedFile.uri,
+                desturi,
+                opts,
+            };
+            await handleDropMove(data, draggedFile.isDir);
+        },
+        [model.formatRemoteUri, handleDropMove]
+    );
+
     const [, drop] = useDrop(
         () => ({
             accept: "FILE_ITEM", //a name of file drop type
@@ -778,18 +855,20 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                     const opts: FileCopyOpts = {
                         timeout: timeoutYear,
                     };
-                    const desturi = await model.formatRemoteUri(dirPath, globalStore.get);
+                    // Target path should be: targetFolder + sourceFileName
+                    const fullTargetPath = dirPath + "/" + draggedFile.relName;
+                    const desturi = await model.formatRemoteUri(fullTargetPath, globalStore.get);
                     const data: CommandFileCopyData = {
                         srcuri: draggedFile.uri,
                         desturi,
                         opts,
                     };
-                    await handleDropCopy(data, draggedFile.isDir);
+                    await handleDropMove(data, draggedFile.isDir);
                 }
             },
             // TODO: mabe add a hover option?
         }),
-        [dirPath, model.formatRemoteUri, model.refreshCallback]
+        [dirPath, model.formatRemoteUri, handleDropMove]
     );
 
     useEffect(() => {
@@ -881,7 +960,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                 onContextMenu={(e) => handleFileContextMenu(e)}
                 onClick={() => setEntryManagerProps(undefined)}
             >
-                <DirectoryTable
+                <DirectoryTree
                     model={model}
                     data={filteredData}
                     search={searchText}
@@ -893,6 +972,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                     entryManagerOverlayPropsAtom={entryManagerPropsAtom}
                     newFile={newFile}
                     newDirectory={newDirectory}
+                    onFileDrop={onFileDrop}
                 />
             </div>
             {entryManagerProps && (
