@@ -137,4 +137,14 @@ Use `wsh://` protocol for file operations:
 - **Prod data**: `~/Library/Application Support/waveterm2`
 - **Logs**: `waveapp.log` in data directory
 
-When dev server starts, set `WCLOUD_ENDPOINT` and `WCLOUD_WS_ENDPOINT` environment variables if needed.
+When dev server starts, set `WCLOUD_ENDPOINT` and `WCLOUD_WS_ENDPOINT` environment variables:
+```bash
+WCLOUD_ENDPOINT="https://api.waveterm.dev/central" WCLOUD_WS_ENDPOINT="wss://wsapi.waveterm.dev/" npm run dev
+```
+
+## Important: Testing Changes
+
+**不要关闭用户正在使用的 Wave 2 应用！** 测试代码修改时：
+1. 使用 `task dev` 启动开发版本（使用 waveterm2-dev 数据目录）
+2. 开发版和正式版可以同时运行，互不影响
+3. 只有用户明确要求更新正式版时，才执行 `task package` 并安装
