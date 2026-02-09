@@ -21,8 +21,11 @@ import type * as MonacoTypes from "monaco-editor";
 import { createRef } from "react";
 import { PreviewView } from "./preview";
 
-// TODO drive this using config
-const BOOKMARKS: { label: string; path: string }[] = [
+// Bookmark type for directory quick navigation
+type BookmarkItem = { label: string; path: string };
+
+// Default bookmarks that are always available
+const DEFAULT_BOOKMARKS: BookmarkItem[] = [
     { label: "Home", path: "~" },
     { label: "Desktop", path: "~/Desktop" },
     { label: "Downloads", path: "~/Downloads" },
@@ -163,7 +166,6 @@ export class PreviewModel implements ViewModel {
 
     showHiddenFiles: PrimitiveAtom<boolean>;
     refreshVersion: PrimitiveAtom<number>;
-    directorySearchActive: PrimitiveAtom<boolean>;
     refreshCallback: () => void;
     directoryKeyDownHandler: (waveEvent: WaveKeyboardEvent) => boolean;
     codeEditKeyDownHandler: (waveEvent: WaveKeyboardEvent) => boolean;
@@ -176,7 +178,6 @@ export class PreviewModel implements ViewModel {
         let showHiddenFiles = globalStore.get(getSettingsKeyAtom("preview:showhiddenfiles")) ?? true;
         this.showHiddenFiles = atom<boolean>(showHiddenFiles);
         this.refreshVersion = atom(0);
-        this.directorySearchActive = atom(false);
         this.previewTextRef = createRef();
         this.openFileModal = atom(false);
         this.openFileModalDelay = atom(false);
@@ -204,11 +205,40 @@ export class PreviewModel implements ViewModel {
                 return {
                     elemtype: "iconbutton",
                     icon: "folder-open",
-                    longClick: (e: React.MouseEvent<any>) => {
-                        const menuItems: ContextMenuItem[] = BOOKMARKS.map((bookmark) => ({
-                            label: `Go to ${bookmark.label} (${bookmark.path})`,
-                            click: () => this.goHistory(bookmark.path),
-                        }));
+                    click: (e: React.MouseEvent<any>) => {
+                        const customBookmarks = this.getCustomBookmarks();
+                        const menuItems: ContextMenuItem[] = [];
+
+                        // Add default bookmarks section
+                        menuItems.push({ label: "Default Bookmarks", type: "separator" });
+                        for (const bookmark of DEFAULT_BOOKMARKS) {
+                            menuItems.push({
+                                label: `${bookmark.label} (${bookmark.path})`,
+                                click: () => this.goHistory(bookmark.path),
+                            });
+                        }
+
+                        // Add custom bookmarks section if any exist
+                        if (customBookmarks.length > 0) {
+                            menuItems.push({ label: "Custom Bookmarks", type: "separator" });
+                            for (const bookmark of customBookmarks) {
+                                menuItems.push({
+                                    label: `${bookmark.label} (${bookmark.path})`,
+                                    click: () => this.goHistory(bookmark.path),
+                                    submenu: [
+                                        {
+                                            label: "Go to",
+                                            click: () => this.goHistory(bookmark.path),
+                                        },
+                                        {
+                                            label: "Remove Bookmark",
+                                            click: () => fireAndForget(() => this.removeBookmark(bookmark.path)),
+                                        },
+                                    ],
+                                });
+                            }
+                        }
+
                         ContextMenuModel.showContextMenu(menuItems, e);
                     },
                 };
@@ -491,6 +521,42 @@ export class PreviewModel implements ViewModel {
         globalStore.set(this.markdownShowToc, !globalStore.get(this.markdownShowToc));
     }
 
+    // Get all bookmarks (default + custom)
+    getBookmarks(): BookmarkItem[] {
+        const customBookmarks = this.getCustomBookmarks();
+        return [...DEFAULT_BOOKMARKS, ...customBookmarks];
+    }
+
+    // Get only custom bookmarks from block metadata
+    getCustomBookmarks(): BookmarkItem[] {
+        const blockData = globalStore.get(this.blockAtom);
+        return (blockData?.meta?.["preview:bookmarks"] as BookmarkItem[]) ?? [];
+    }
+
+    // Add a new custom bookmark
+    async addBookmark(path: string, label: string): Promise<void> {
+        const bookmarks = this.getCustomBookmarks();
+        // Check if bookmark already exists
+        if (bookmarks.some((b) => b.path === path)) {
+            return;
+        }
+        const newBookmarks = [...bookmarks, { label, path }];
+        await RpcApi.SetMetaCommand(TabRpcClient, {
+            oref: WOS.makeORef("block", this.blockId),
+            meta: { "preview:bookmarks": newBookmarks },
+        });
+    }
+
+    // Remove a custom bookmark by path
+    async removeBookmark(path: string): Promise<void> {
+        const bookmarks = this.getCustomBookmarks();
+        const newBookmarks = bookmarks.filter((b) => b.path !== path);
+        await RpcApi.SetMetaCommand(TabRpcClient, {
+            oref: WOS.makeORef("block", this.blockId),
+            meta: { "preview:bookmarks": newBookmarks },
+        });
+    }
+
     get viewComponent(): ViewComponent {
         return PreviewView;
     }
@@ -765,7 +831,7 @@ export class PreviewModel implements ViewModel {
         addOpenMenuItems(menuItems, globalStore.get(this.connectionImmediate), finfo);
         const loadableSV = globalStore.get(this.loadableSpecializedView);
         const wordWrapAtom = getOverrideConfigAtom(this.blockId, "editor:wordwrap");
-        const wordWrap = globalStore.get(wordWrapAtom) ?? false;
+        const wordWrap = globalStore.get(wordWrapAtom) ?? true;
         if (loadableSV.state == "hasData") {
             if (loadableSV.data.specializedView == "codeedit") {
                 if (globalStore.get(this.newFileContent) != null) {

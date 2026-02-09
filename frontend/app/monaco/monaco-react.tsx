@@ -103,7 +103,7 @@ export function MonacoCodeEditor({
         monaco.editor.setModelLanguage(model, language);
     }, [language]);
 
-    return <div className="flex flex-col h-full w-full" ref={divRef} />;
+    return <div className="absolute inset-0" ref={divRef} />;
 }
 
 type DiffViewerProps = {

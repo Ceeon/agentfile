@@ -56,13 +56,21 @@ func CacheAndRemoveEnvVars() error {
 	WCloudEndpoint_VarCache = os.Getenv(WCloudEndpointVarName)
 	err := checkEndpointVar(WCloudEndpoint_VarCache, "wcloud endpoint", WCloudEndpointVarName)
 	if err != nil {
-		return err
+		if WCloudEndpoint_VarCache == "" {
+			log.Printf("[wcloud] %s not set; cloud features disabled in dev\n", WCloudEndpointVarName)
+		} else {
+			return err
+		}
 	}
 	os.Unsetenv(WCloudEndpointVarName)
 	WCloudWSEndpoint_VarCache = os.Getenv(WCloudWSEndpointVarName)
 	err = checkWSEndpointVar(WCloudWSEndpoint_VarCache, "wcloud ws endpoint", WCloudWSEndpointVarName)
 	if err != nil {
-		return err
+		if WCloudWSEndpoint_VarCache == "" {
+			log.Printf("[wcloud] %s not set; cloud features disabled in dev\n", WCloudWSEndpointVarName)
+		} else {
+			return err
+		}
 	}
 	os.Unsetenv(WCloudWSEndpointVarName)
 	WCloudPingEndpoint_VarCache = os.Getenv(WCloudPingEndpointVarName)

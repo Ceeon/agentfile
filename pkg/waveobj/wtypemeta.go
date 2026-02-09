@@ -85,6 +85,8 @@ type MetaTSType struct {
 	EditorWordWrap            bool    `json:"editor:wordwrap,omitempty"`
 	EditorFontSize            float64 `json:"editor:fontsize,omitempty"`
 
+	PreviewBookmarks []map[string]any `json:"preview:bookmarks,omitempty"` // custom bookmarks for directory preview
+
 	GraphClear     bool     `json:"graph:*,omitempty"`
 	GraphNumPoints int      `json:"graph:numpoints,omitempty"`
 	GraphMetrics   []string `json:"graph:metrics,omitempty"`

@@ -9,6 +9,7 @@ export enum EntryManagerType {
     NewFile = "New File",
     NewDirectory = "New Folder",
     EditName = "Rename",
+    BookmarkLabel = "Bookmark Name",
 }
 
 export type EntryManagerOverlayProps = {

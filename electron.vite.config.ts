@@ -11,6 +11,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 // from our electron build
 const CHROME = "chrome140";
 const NODE = "node22";
+const DEV_PORT = Number(process.env.WAVE_DEV_PORT ?? process.env.VITE_PORT ?? 5173);
 
 // for debugging
 // target is like -- path.resolve(__dirname, "frontend/app/workspace/workspace-layout-model.ts");
@@ -150,6 +151,7 @@ export default defineConfig({
         },
         server: {
             open: false,
+            port: DEV_PORT,
             watch: {
                 ignored: [
                     "dist/**",

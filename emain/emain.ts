@@ -55,7 +55,7 @@ import { configureAutoUpdater, updater } from "./updater";
 
 const electronApp = electron.app;
 
-let confirmQuit = true;
+let confirmQuit = false;
 
 const waveDataDir = getWaveDataDir();
 const waveConfigDir = getWaveConfigDir();

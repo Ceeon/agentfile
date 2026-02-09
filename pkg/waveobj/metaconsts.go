@@ -83,6 +83,8 @@ const (
 	MetaKey_EditorWordWrap                   = "editor:wordwrap"
 	MetaKey_EditorFontSize                   = "editor:fontsize"
 
+	MetaKey_PreviewBookmarks                 = "preview:bookmarks"
+
 	MetaKey_GraphClear                       = "graph:*"
 	MetaKey_GraphNumPoints                   = "graph:numpoints"
 	MetaKey_GraphMetrics                     = "graph:metrics"

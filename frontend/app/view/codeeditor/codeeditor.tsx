@@ -10,6 +10,7 @@ import React, { useMemo, useRef } from "react";
 
 function defaultEditorOptions(): MonacoTypes.editor.IEditorOptions {
     const opts: MonacoTypes.editor.IEditorOptions = {
+        automaticLayout: true,
         scrollBeyondLastLine: false,
         fontSize: 12,
         fontFamily: "Hack",
@@ -44,7 +45,7 @@ export function CodeEditor({ blockId, text, language, fileName, readonly, onChan
     const unmountRef = useRef<() => void>(null);
     const minimapEnabled = useOverrideConfigAtom(blockId, "editor:minimapenabled") ?? false;
     const stickyScrollEnabled = useOverrideConfigAtom(blockId, "editor:stickyscrollenabled") ?? false;
-    const wordWrap = useOverrideConfigAtom(blockId, "editor:wordwrap") ?? false;
+    const wordWrap = useOverrideConfigAtom(blockId, "editor:wordwrap") ?? true;
     const fontSize = boundNumber(useOverrideConfigAtom(blockId, "editor:fontsize"), 6, 64);
     const uuidRef = useRef(crypto.randomUUID()).current;
     let editorPath: string;
@@ -93,18 +94,16 @@ export function CodeEditor({ blockId, text, language, fileName, readonly, onChan
     }, [minimapEnabled, stickyScrollEnabled, wordWrap, fontSize, readonly]);
 
     return (
-        <div className="flex flex-col w-full h-full overflow-hidden items-center justify-center">
-            <div className="flex flex-col h-full w-full" ref={divRef}>
-                <MonacoCodeEditor
-                    readonly={readonly}
-                    text={text}
-                    options={editorOpts}
-                    onChange={handleEditorChange}
-                    onMount={handleEditorOnMount}
-                    path={editorPath}
-                    language={language}
-                />
-            </div>
+        <div className="relative w-full h-full overflow-hidden">
+            <MonacoCodeEditor
+                readonly={readonly}
+                text={text}
+                options={editorOpts}
+                onChange={handleEditorChange}
+                onMount={handleEditorOnMount}
+                path={editorPath}
+                language={language}
+            />
         </div>
     );
 }
