@@ -27,7 +27,7 @@ function Test-AgentfileRepo {
     if (!(Test-Path $taskFile) -or !(Test-Path $packageFile)) {
         return $false
     }
-    return (Select-String -Path $packageFile -Pattern '"name": "waveterm"' -Quiet)
+    return (Select-String -Path $packageFile -Pattern '"name": "(agentfile|waveterm)"' -Quiet)
 }
 
 function Require-Command {

@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EMBEDDED_REPO="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 is_agentfile_repo() {
-  [[ -f "$1/Taskfile.yml" && -f "$1/package.json" ]] && grep -q '"name": "waveterm"' "$1/package.json" 2>/dev/null
+  [[ -f "$1/Taskfile.yml" && -f "$1/package.json" ]] && grep -Eq '"name": "(agentfile|waveterm)"' "$1/package.json" 2>/dev/null
 }
 
 AGENTFILE_REPO="${AGENTFILE_REPO:-}"

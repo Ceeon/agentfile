@@ -30,6 +30,7 @@ description: |
 2. 确认仓库路径。
    - 当前目录是 Agentfile 仓库时直接使用当前目录。
    - 否则脚本会从本 skill 所在路径反推项目根目录。
+   - 仓库识别接受 `package.json` 中的 `name` 为 `agentfile`，并兼容历史 `waveterm`。
    - 需要给别人安装时，可用 `AGENTFILE_REPO_URL` 指定 fork 地址；默认是 `https://github.com/Ceeon/agentfile.git`。
 
 3. 检查依赖。
