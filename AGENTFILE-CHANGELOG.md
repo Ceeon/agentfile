@@ -1,4 +1,4 @@
-# Wave 2 修改日志
+# Agentfile 修改日志
 
 基于 Wave Terminal v0.13.2-alpha.0 的定制版本。
 
@@ -61,8 +61,8 @@ Bug 修复：
 
 **文件**: `package.json`
 
-- `productName`: Wave → Wave 2
-- `appId`: dev.commandline.waveterm → dev.commandline.wave2
+- `productName`: Wave → Agentfile
+- `appId`: dev.commandline.waveterm → dev.ceeon.agentfile
 
 ### 7. Block 重命名功能
 
@@ -82,14 +82,14 @@ Bug 修复：
 
 **文件**: `emain/emain-platform.ts`
 
-原版 Wave 和 Wave 2 共享同一个应用名和单实例锁，导致 Wave 2 无法启动。修改：
+原版 Wave 和 Agentfile 共享同一个应用名和单实例锁，导致 Agentfile 无法启动。修改：
 
 - `app.setName("waveterm/electron")` → `app.setName("waveterm2/electron")`
-- `app.setName("Wave")` → `app.setName("Wave 2")`（生产模式）
+- `app.setName("Wave")` → `app.setName("Agentfile")`（生产模式）
 - `waveDirNamePrefix = "waveterm"` → `waveDirNamePrefix = "waveterm2"`
 - `envPaths("waveterm", ...)` → `envPaths("waveterm2", ...)`
 
-这确保 Wave 2 有独立的：
+这确保 Agentfile 有独立的：
 - 单实例锁
 - 数据目录
 - 配置目录
@@ -125,13 +125,13 @@ task package
 
 ## 数据目录
 
-Wave 2 与原版 Wave 完全独立运行，互不影响：
+Agentfile 与原版 Wave 完全独立运行，互不影响：
 
 | 版本 | 数据目录 |
 |-----|---------|
 | Wave 原版 | `~/Library/Application Support/waveterm` |
-| Wave 2 正式版 | `~/Library/Application Support/waveterm2` |
-| Wave 2 开发版 | `~/Library/Application Support/waveterm2-dev` |
+| Agentfile 正式版 | `~/Library/Application Support/waveterm2` |
+| Agentfile 开发版 | `~/Library/Application Support/waveterm2-dev` |
 
 ---
 

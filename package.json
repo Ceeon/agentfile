@@ -1,16 +1,16 @@
 {
-    "name": "waveterm",
+    "name": "agentfile",
     "author": {
         "name": "Command Line Inc",
         "email": "info@commandline.dev"
     },
-    "productName": "Wave 2",
-    "description": "Open-Source AI-Native Terminal Built for Seamless Workflows",
+    "productName": "Agentfile",
+    "description": "Open-source AI-native terminal and file workspace based on Wave Terminal",
     "license": "Apache-2.0",
     "version": "0.13.2-alpha.0",
-    "homepage": "https://waveterm.dev",
+    "homepage": "https://github.com/Ceeon/agentfile",
     "build": {
-        "appId": "dev.commandline.wave2"
+        "appId": "dev.ceeon.agentfile"
     },
     "private": true,
     "main": "./dist/main/index.js",

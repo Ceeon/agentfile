@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_REPO_URL="https://github.com/Ceeon/waveterm-fork.git"
+DEFAULT_REPO_URL="https://github.com/Ceeon/agentfile.git"
 ACTION="${1:-status}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EMBEDDED_REPO="$(cd "$SCRIPT_DIR/../../../.." && pwd)"

@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$DefaultRepoUrl = "https://github.com/Ceeon/waveterm-fork.git"
+$DefaultRepoUrl = "https://github.com/Ceeon/agentfile.git"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $EmbeddedRepo = [System.IO.Path]::GetFullPath((Join-Path $ScriptDir "..\..\..\.."))
 

@@ -119,7 +119,7 @@ const config = {
     },
     publish: {
         provider: "generic",
-        url: "https://dl.waveterm.dev/releases-w2",
+        url: "https://github.com/Ceeon/agentfile/releases/download/latest",
     },
     afterPack: (context) => {
         // This is a workaround to restore file permissions to the wavesrv binaries on macOS after packaging the universal binary.

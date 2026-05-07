@@ -30,7 +30,7 @@ description: |
 2. 确认仓库路径。
    - 当前目录是 Agentfile 仓库时直接使用当前目录。
    - 否则脚本会从本 skill 所在路径反推项目根目录。
-   - 需要给别人安装时，可用 `AGENTFILE_REPO_URL` 指定 fork 地址；默认是 `https://github.com/Ceeon/waveterm-fork.git`。
+   - 需要给别人安装时，可用 `AGENTFILE_REPO_URL` 指定 fork 地址；默认是 `https://github.com/Ceeon/agentfile.git`。
 
 3. 检查依赖。
    - 必要命令：`git`、`node`、`npm`、`go`、`task`。
@@ -74,13 +74,13 @@ powershell -ExecutionPolicy Bypass -File scripts/agentfile-dev.ps1 run
 
 ```bash
 AGENTFILE_REPO="$HOME/Desktop/Agentfile" scripts/agentfile-dev.sh run
-AGENTFILE_REPO_URL="https://github.com/Ceeon/waveterm-fork.git" scripts/agentfile-dev.sh install
+AGENTFILE_REPO_URL="https://github.com/Ceeon/agentfile.git" scripts/agentfile-dev.sh install
 AGENTFILE_CLONE_DEPTH=1 scripts/agentfile-dev.sh install
 ```
 
 ```powershell
 $env:AGENTFILE_REPO = "$HOME\Desktop\Agentfile"
-$env:AGENTFILE_REPO_URL = "https://github.com/Ceeon/waveterm-fork.git"
+$env:AGENTFILE_REPO_URL = "https://github.com/Ceeon/agentfile.git"
 $env:AGENTFILE_CLONE_DEPTH = "1"
 powershell -ExecutionPolicy Bypass -File scripts/agentfile-dev.ps1 run
 ```

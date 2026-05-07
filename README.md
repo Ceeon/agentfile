@@ -9,15 +9,15 @@
   <br/>
 </p>
 
-# Agentfile / Wave 2
+# Agentfile
 
-Agentfile / Wave 2 is a customized fork of [Wave Terminal](https://github.com/wavetermdev/waveterm).
+Agentfile is a customized fork of [Wave Terminal](https://github.com/wavetermdev/waveterm).
 It is not an official Wave Terminal release and is maintained separately by the Agentfile contributors.
 
 The original Wave Terminal project is copyright 2025 Command Line Inc. and licensed under Apache-2.0.
-Agentfile / Wave 2 keeps the upstream license and attribution while adding fork-specific changes such as
+Agentfile keeps the upstream license and attribution while adding fork-specific changes such as
 data isolation, UI customization, and local development tooling. See [NOTICE](./NOTICE) and
-[WAVE2-CHANGELOG.md](./WAVE2-CHANGELOG.md) for attribution and modification notes.
+[AGENTFILE-CHANGELOG.md](./AGENTFILE-CHANGELOG.md) for attribution and modification notes.
 
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fwavetermdev%2Fwaveterm.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fwavetermdev%2Fwaveterm?ref=badge_shield)
 
@@ -107,6 +107,6 @@ Find more information in our [Contributions Guide](CONTRIBUTING.md), which inclu
 
 ## License
 
-Agentfile / Wave 2 is distributed under the Apache-2.0 License as a modified fork of Wave Terminal.
+Agentfile is distributed under the Apache-2.0 License as a modified fork of Wave Terminal.
 The upstream Wave Terminal copyright and attribution notices are retained in [NOTICE](./NOTICE).
 For dependency acknowledgements, see [ACKNOWLEDGEMENTS.md](./ACKNOWLEDGEMENTS.md).
