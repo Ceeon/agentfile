@@ -7,9 +7,6 @@ import type * as rxjs from "rxjs";
 
 declare global {
     type GlobalAtomsType = {
-        builderId: jotai.PrimitiveAtom<string>; // readonly (for builder mode)
-        builderAppId: jotai.PrimitiveAtom<string>; // app being edited in builder mode
-        waveWindowType: jotai.Atom<"tab" | "builder">; // derived from builderId
         uiContext: jotai.Atom<UIContext>; // driven from windowId, tabId
         workspace: jotai.Atom<Workspace>; // driven from WOS
         fullConfigAtom: jotai.PrimitiveAtom<FullConfigType>; // driven from WOS, settings -- updated via WebSocket
@@ -27,7 +24,7 @@ declare global {
         allConnStatus: jotai.Atom<ConnStatus[]>;
         flashErrors: jotai.PrimitiveAtom<FlashErrorType[]>;
         notifications: jotai.PrimitiveAtom<NotificationType[]>;
-        notificationPopoverMode: jotai.Atom<boolean>;
+        notificationPopoverMode: jotai.PrimitiveAtom<boolean>;
         reinitVersion: jotai.PrimitiveAtom<number>;
         waveAIRateLimitInfoAtom: jotai.PrimitiveAtom<RateLimitInfo>;
     };
@@ -62,7 +59,6 @@ declare global {
         clientId: string;
         environment: "electron" | "renderer";
         primaryTabStartup?: boolean;
-        builderId?: string;
     };
 
     type WaveInitOpts = {
@@ -73,10 +69,41 @@ declare global {
         primaryTabStartup?: boolean;
     };
 
-    type BuilderInitOpts = {
-        builderId: string;
-        clientId: string;
-        windowId: string;
+    type FileWindowOpenRequest = {
+        filePath: string;
+        connection?: string | null;
+    };
+
+    type ClipboardImageData = {
+        mimeType: string;
+        data64: string;
+    };
+
+    type DirectoryOpenTarget = "finder" | "terminal";
+    type ExternalTerminalApp =
+        | "auto"
+        | "terminal"
+        | "ghostty"
+        | "iterm2"
+        | "cmux"
+        | "warp"
+        | "wezterm"
+        | "kitty"
+        | "alacritty"
+        | "rio"
+        | "hyper"
+        | "tabby"
+        | "windows-terminal"
+        | "powershell"
+        | "pwsh"
+        | "cmd"
+        | "git-bash";
+    type ExternalTerminalAppInfo = {
+        value: Exclude<ExternalTerminalApp, "auto">;
+        label: string;
+        available: boolean;
+        supported: boolean;
+        reason?: string;
     };
 
     type ElectronApi = {
@@ -90,11 +117,12 @@ declare global {
         getDataDir: () => string; // get-data-dir
         getConfigDir: () => string; // get-config-dir
         getHomeDir: () => string; // get-home-dir
-        getWebviewPreload: () => string; // get-webview-preload
         getAboutModalDetails: () => AboutModalDetails; // get-about-modal-details
         getZoomFactor: () => number; // get-zoom-factor
+        openNewWindow: () => void; // open-new-window
+        openFileInNewTab: (filePath: string, connection?: string) => void; // open-file-in-new-tab
+        registerGlobalWebviewKeys: (keys: string[]) => void;
         showWorkspaceAppMenu: (workspaceId: string) => void; // workspace-appmenu-show
-        showBuilderAppMenu: (builderId: string) => void; // builder-appmenu-show
         showContextMenu: (workspaceId: string, menu: ElectronContextMenuItem[]) => void; // contextmenu-show
         onContextMenuClick: (callback: (id: string) => void) => void; // contextmenu-click
         onNavigate: (callback: (url: string) => void) => void;
@@ -108,10 +136,10 @@ declare global {
         getUpdaterChannel: () => string; // get-updater-channel
         installAppUpdate: () => void; // install-app-update
         onMenuItemAbout: (callback: () => void) => void; // menu-item-about
+        onMenuItemSettings: (callback: () => void) => void; // menu-item-settings
+        onMenuItemNewFolderWindow: (callback: () => void) => void; // menu-item-new-folder-window
         updateWindowControlsOverlay: (rect: Dimensions) => void; // update-window-controls-overlay
         onReinjectKey: (callback: (waveEvent: WaveKeyboardEvent) => void) => void; // reinject-key
-        setWebviewFocus: (focusedId: number) => void; // webview-focus, focusedId is the getWebContentsId of the webview
-        registerGlobalWebviewKeys: (keys: string[]) => void; // register-global-webview-keys
         onControlShiftStateUpdate: (callback: (state: boolean) => void) => void; // control-shift-state-update
         createWorkspace: () => void; // create-workspace
         switchWorkspace: (workspaceId: string) => void; // switch-workspace
@@ -120,22 +148,27 @@ declare global {
         createTab: () => void; // create-tab
         closeTab: (workspaceId: string, tabId: string) => void; // close-tab
         setWindowInitStatus: (status: "ready" | "wave-ready") => void; // set-window-init-status
-        onWaveInit: (callback: (initOpts: WaveInitOpts) => void) => void; // wave-init
-        onBuilderInit: (callback: (initOpts: BuilderInitOpts) => void) => void; // builder-init
+        onWaveInit: (callback: (initOpts: WaveInitOpts) => void) => (() => void) | void; // wave-init
+        onOpenFileInCurrentWindow: (
+            callback: (request: FileWindowOpenRequest) => void
+        ) => (() => void) | void; // open-file-in-current-window
         sendLog: (log: string) => void; // fe-log
         onQuicklook: (filePath: string) => void; // quicklook
         openNativePath(filePath: string): void; // open-native-path
+        openExternalTerminal(cwd: string, connection?: string): void; // open-external-terminal
+        openDirectoryTarget(target: DirectoryOpenTarget, cwd: string, connection?: string): void; // open-directory-target
+        listDirectoryOpenTargets(connection?: string): Promise<DirectoryOpenTarget[]>; // list-directory-open-targets
+        listExternalTerminalApps(): Promise<ExternalTerminalAppInfo[]>; // list-external-terminal-apps
+        openFileInBrowser(filePath: string): void; // open-file-in-browser
         showItemInFolder(filePath: string): void; // show-item-in-folder
+        writeClipboardText(text: string): Promise<void>; // write-clipboard-text
+        writeClipboardHtml(html: string, text?: string): Promise<void>; // write-clipboard-html
         readClipboardFiles(): Promise<string[]>; // read-clipboard-files
+        readClipboardImage(): Promise<ClipboardImageData | null>; // read-clipboard-image
         captureScreenshot(rect: Electron.Rectangle): Promise<string>; // capture-screenshot
         setKeyboardChordMode: () => void; // set-keyboard-chord-mode
-        clearWebviewStorage: (webContentsId: number) => Promise<void>; // clear-webview-storage
-        setWaveAIOpen: (isOpen: boolean) => void; // set-waveai-open
-        closeBuilderWindow: () => void; // close-builder-window
         incrementTermCommands: () => void; // increment-term-commands
         nativePaste: () => void; // native-paste
-        openBuilder: (appId?: string) => void; // open-builder
-        setBuilderWindowAppId: (appId: string) => void; // set-builder-window-appid
         doRefresh: () => void; // do-refresh
     };
 
@@ -231,6 +264,8 @@ declare global {
         value: string;
         className?: string;
         isDisabled?: boolean;
+        autoFocus?: boolean;
+        autoSelect?: boolean;
         ref?: React.RefObject<HTMLInputElement>;
         onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
         onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;

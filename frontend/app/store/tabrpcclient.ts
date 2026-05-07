@@ -1,11 +1,8 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { getApi } from "@/app/store/global";
-import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { getLayoutModelForStaticTab } from "@/layout/index";
-import { base64ToArrayBuffer } from "@/util/util";
 import { RpcResponseHelper, WshClient } from "./wshclient";
 
 export class TabClient extends WshClient {
@@ -60,34 +57,8 @@ export class TabClient extends WshClient {
         return await getApi().captureScreenshot(electronRect);
     }
 
-    async handle_waveaiaddcontext(rh: RpcResponseHelper, data: CommandWaveAIAddContextData): Promise<void> {
-        const workspaceLayoutModel = WorkspaceLayoutModel.getInstance();
-        if (!workspaceLayoutModel.getAIPanelVisible()) {
-            workspaceLayoutModel.setAIPanelVisible(true, { nofocus: true });
-        }
-
-        const model = WaveAIModel.getInstance();
-
-        if (data.newchat) {
-            model.clearChat();
-        }
-
-        if (data.files && data.files.length > 0) {
-            for (const fileData of data.files) {
-                const decodedData = base64ToArrayBuffer(fileData.data64);
-                const blob = new Blob([decodedData], { type: fileData.type });
-                const file = new File([blob], fileData.name, { type: fileData.type });
-                await model.addFile(file);
-            }
-        }
-
-        if (data.text) {
-            model.appendText(data.text);
-        }
-
-        if (data.submit) {
-            await model.handleSubmit();
-        }
+    async handle_waveaiaddcontext(_rh: RpcResponseHelper, _data: CommandWaveAIAddContextData): Promise<void> {
+        return;
     }
 
     async handle_setblockfocus(rh: RpcResponseHelper, blockId: string): Promise<void> {

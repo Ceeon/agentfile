@@ -36,25 +36,25 @@ export function blockViewToIcon(view: string): string {
 
 export function blockViewToName(view: string): string {
     if (util.isBlank(view)) {
-        return "(No View)";
+        return "（无视图）";
     }
     if (view == "term") {
-        return "Terminal";
+        return "终端";
     }
     if (view == "preview") {
-        return "Preview";
+        return "文件";
     }
     if (view == "web") {
-        return "Web";
+        return "网页";
     }
     if (view == "waveai") {
-        return "WaveAI";
+        return "AI";
     }
     if (view == "help") {
-        return "Help";
+        return "帮助";
     }
     if (view == "tips") {
-        return "Tips";
+        return "提示";
     }
     return view;
 }
@@ -163,7 +163,7 @@ export function getViewIconElem(
 
 export const Input = React.memo(
     ({ decl, className, preview }: { decl: HeaderInput; className: string; preview: boolean }) => {
-        const { value, ref, isDisabled, onChange, onKeyDown, onFocus, onBlur } = decl;
+        const { value, ref, isDisabled, autoFocus, autoSelect, onChange, onKeyDown, onFocus, onBlur } = decl;
         return (
             <div className="input-wrapper">
                 <input
@@ -175,10 +175,16 @@ export const Input = React.memo(
                     disabled={isDisabled}
                     className={className}
                     value={value}
-                    onChange={(e) => onChange(e)}
-                    onKeyDown={(e) => onKeyDown(e)}
-                    onFocus={(e) => onFocus(e)}
-                    onBlur={(e) => onBlur(e)}
+                    autoFocus={autoFocus && !preview}
+                    onChange={(e) => onChange?.(e)}
+                    onKeyDown={(e) => onKeyDown?.(e)}
+                    onFocus={(e) => {
+                        if (autoSelect) {
+                            e.currentTarget.select();
+                        }
+                        onFocus?.(e);
+                    }}
+                    onBlur={(e) => onBlur?.(e)}
                     onDragStart={(e) => e.preventDefault()}
                 />
             </div>

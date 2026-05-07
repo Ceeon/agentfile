@@ -41,12 +41,12 @@ const RenameBlockModal = memo(
                 onOk={handleRename}
                 onCancel={handleClose}
                 onClose={handleClose}
-                okLabel="Rename"
-                cancelLabel="Cancel"
+                okLabel="重命名"
+                cancelLabel="取消"
                 okDisabled={isRenaming}
             >
                 <div className="flex flex-col gap-4 mb-4">
-                    <h2 className="text-xl font-semibold">Rename Block</h2>
+                    <h2 className="text-xl font-semibold">重命名区块</h2>
                     <div className="flex flex-col gap-2">
                         <input
                             type="text"
@@ -60,7 +60,7 @@ const RenameBlockModal = memo(
                                     handleRename();
                                 }
                             }}
-                            placeholder="Enter new name (empty to reset)"
+                            placeholder="输入新名称（留空则恢复默认）"
                             className="px-3 py-2 bg-panel border border-border rounded focus:outline-none focus:border-accent"
                             autoFocus
                             disabled={isRenaming}

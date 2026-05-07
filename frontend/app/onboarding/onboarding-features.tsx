@@ -4,7 +4,6 @@
 import Logo from "@/app/asset/logo.svg";
 import { Button } from "@/app/element/button";
 import { EmojiButton } from "@/app/element/emojibutton";
-import { MagnifyIcon } from "@/app/element/magnify";
 import { ClientModel } from "@/app/store/client-model";
 import * as WOS from "@/app/store/wos";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -32,18 +31,18 @@ const OnboardingFooter = ({
     onSkip?: () => void;
 }) => {
     const isLastStep = currentStep === totalSteps;
-    const buttonText = isLastStep ? "Get Started" : "Next";
+    const buttonText = isLastStep ? "开始使用" : "下一步";
 
     return (
         <footer className="unselectable flex-shrink-0 mt-5 relative">
             <div className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
                 {currentStep > 1 && onPrev && (
                     <button className="text-muted cursor-pointer hover:text-foreground text-[13px]" onClick={onPrev}>
-                        &lt; Prev
+                        &lt; 上一步
                     </button>
                 )}
                 <span className="text-muted text-[13px]">
-                    {currentStep} of {totalSteps}
+                    第 {currentStep} / {totalSteps} 步
                 </span>
             </div>
             <div className="flex flex-row items-center justify-center [&>button]:!px-5 [&>button]:!py-2 [&>button]:text-sm">
@@ -56,7 +55,7 @@ const OnboardingFooter = ({
                     className="absolute right-0 top-1/2 -translate-y-1/2 text-muted cursor-pointer hover:text-muted-hover text-[13px]"
                     onClick={onSkip}
                 >
-                    Skip Feature Tour &gt;
+                    跳过功能导览 &gt;
                 </button>
             )}
         </footer>
@@ -87,7 +86,7 @@ const WaveAIPage = ({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
                 <div>
                     <Logo />
                 </div>
-                <div className="text-[25px] font-normal text-foreground">Wave AI</div>
+                <div className="text-[25px] font-normal text-foreground">AI 助手</div>
             </header>
             <div className="flex-1 flex flex-row gap-0 min-h-0">
                 <div className="flex-1 flex flex-col items-center justify-center gap-8 pr-6 unselectable">
@@ -99,38 +98,36 @@ const WaveAIPage = ({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
 
                         <div className="flex flex-col items-start gap-4 text-secondary">
                             <p>
-                                Wave AI is your terminal assistant with context. I can read your terminal output,
-                                analyze widgets, read/write files, and help you solve problems faster.
+                                AI 助手是你的上下文工作助手。它可以读取终端输出、分析组件、读写文件，并帮助你更快解决问题。
                             </p>
 
                             <div className="flex items-start gap-3 w-full">
                                 <i className="fa fa-sparkles text-accent text-lg mt-1 flex-shrink-0" />
                                 <p>
-                                    Toggle the Wave AI panel with the{" "}
+                                    通过头部的{" "}
                                     <span className="inline-flex h-[26px] px-1.5 items-center rounded-md box-border bg-hover text-accent text-[12px] align-middle">
                                         <i className="fa fa-sparkles" />
                                         <span className="font-bold ml-1 font-mono">AI</span>
-                                    </span>{" "}
-                                    button in the header (top left)
+                                    </span>
+                                    按钮切换 AI 面板（左上角）
                                 </p>
                             </div>
 
                             <div className="flex items-start gap-3 w-full">
                                 <i className="fa fa-keyboard text-accent text-lg mt-1 flex-shrink-0" />
                                 <p>
-                                    Or use the keyboard shortcut{" "}
+                                    也可以使用快捷键{" "}
                                     <span className="font-mono font-semibold text-foreground whitespace-nowrap">
                                         {shortcutKey}
                                     </span>{" "}
-                                    to quickly toggle
+                                    快速切换
                                 </p>
                             </div>
 
                             <div className="flex items-start gap-3 w-full">
                                 <i className="fa fa-key text-accent text-lg mt-1 flex-shrink-0" />
                                 <p>
-                                    Bring your own API keys or run local models with Ollama, LM Studio, and other
-                                    OpenAI-compatible providers
+                                    你可以自带 API Key，或通过 Ollama、LM Studio 等 OpenAI 兼容提供方运行本地模型
                                 </p>
                             </div>
 
@@ -182,27 +179,19 @@ const MagnifyBlocksPage = ({
                 <div>
                     <Logo />
                 </div>
-                <div className="text-[25px] font-normal text-foreground">Magnify Blocks</div>
+                <div className="text-[25px] font-normal text-foreground">重命名标签页</div>
             </header>
             <div className="flex-1 flex flex-row gap-0 min-h-0">
                 <div className="flex-1 flex flex-col items-center justify-center gap-8 pr-6 unselectable">
-                    <div className="text-6xl font-semibold text-foreground">{shortcutKey}-M</div>
+                    <div className="text-6xl font-semibold text-foreground">{shortcutKey}-R</div>
                     <div className="flex flex-col items-start gap-4 text-secondary max-w-md">
                         <p>
-                            Magnify any block to focus on what matters. Expand terminals, editors, and previews for a
-                            better view.
-                        </p>
-                        <p>Use the magnify feature to work with complex outputs and large files more efficiently.</p>
-                        <p>
-                            You can also magnify a block by clicking on the{" "}
-                            <span className="inline-block align-middle [&_svg_path]:!fill-foreground">
-                                <MagnifyIcon enabled={false} />
-                            </span>{" "}
-                            icon in the block header.
+                            给当前标签页起一个清晰的名字，多个文件空间并排工作时会更容易定位和切换。
                         </p>
                         <p>
-                            A quick {shortcutKey}-M to magnify and another {shortcutKey}-M to unmagnify
+                            你可以直接按一次 {shortcutKey}-R，或者在标签页上双击、右键选择“重命名标签页”。
                         </p>
+                        <p>把标签页名字改成目录名、项目名或任务名，会比默认名字更好用。</p>
                         <EmojiButton emoji="🔥" isClicked={fireClicked} onClick={handleFireClick} />
                     </div>
                 </div>
@@ -254,26 +243,25 @@ const FilesPage = ({ onFinish, onPrev }: { onFinish: () => void; onPrev?: () => 
                 <div>
                     <Logo />
                 </div>
-                <div className="text-[25px] font-normal text-foreground">Viewing/Editing Files</div>
+                <div className="text-[25px] font-normal text-foreground">查看与编辑文件</div>
             </header>
             <div className="flex-1 flex flex-row gap-0 min-h-0">
                 <div className="flex-1 flex flex-col items-center justify-center gap-8 pr-6 unselectable">
                     <div className="flex flex-col items-start gap-6 max-w-md">
                         <div className="flex flex-col items-start gap-4 text-secondary">
                             <p>
-                                Wave can preview markdown, images, and video files on both local <i>and remote</i>{" "}
-                                machines.
+                                Agentfile 可以在本地<i>和远程</i>机器上预览 Markdown、图片和视频文件。
                             </p>
 
                             <div className="flex items-start gap-3 w-full">
                                 <i className="fa fa-eye text-accent text-lg mt-1 flex-shrink-0" />
                                 <div>
                                     <p className="mb-2">
-                                        Use{" "}
+                                        使用{" "}
                                         <span className="font-mono font-semibold text-foreground">
                                             wsh view [filename]
                                         </span>{" "}
-                                        to preview files in Wave's graphical viewer
+                                        在图形预览器中查看文件
                                     </p>
                                 </div>
                             </div>
@@ -282,18 +270,17 @@ const FilesPage = ({ onFinish, onPrev }: { onFinish: () => void; onPrev?: () => 
                                 <i className="fa fa-pen-to-square text-accent text-lg mt-1 flex-shrink-0" />
                                 <div>
                                     <p className="mb-2">
-                                        Use{" "}
+                                        使用{" "}
                                         <span className="font-mono font-semibold text-foreground">
                                             wsh edit [filename]
                                         </span>{" "}
-                                        to open config files or code files in Wave's graphical editor
+                                        在图形编辑器中打开配置文件或代码文件
                                     </p>
                                 </div>
                             </div>
 
                             <p>
-                                These commands work seamlessly on both local and remote machines, making it easy to view
-                                and edit files wherever they are.
+                                这些命令在本地和远程环境里都能无缝工作，让你可以随时查看和编辑任何位置的文件。
                             </p>
 
                             <EmojiButton emoji="🔥" isClicked={fireClicked} onClick={handleFireClick} />

@@ -36,7 +36,7 @@ const NotificationItem = ({
     const renderCloseButton = () => {
         if (!isBubble && persistent) {
             return (
-                <span className="lock-btn" title="Cannot be cleared">
+                <span className="lock-btn" title="不可清除">
                     <i className={makeIconClass("lock", false)}></i>
                 </span>
             );
@@ -48,7 +48,7 @@ const NotificationItem = ({
                     e.stopPropagation();
                     onRemove(id);
                 }}
-                aria-label="Close"
+                aria-label="关闭"
             >
                 <i className={clsx(makeIconClass("close", false), color)}></i>
             </Button>
@@ -61,7 +61,7 @@ const NotificationItem = ({
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
             onClick={() => onCopy(id)}
-            title="Click to Copy Notification Message"
+            title="点击复制通知内容"
         >
             {renderCloseButton()}
             <div className="notification-inner">

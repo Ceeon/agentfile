@@ -91,8 +91,8 @@ export class Updater {
             // Display the update banner and create a system notification
             this.status = "ready";
             const updateNotification = new Notification({
-                title: "Wave Terminal",
-                body: "A new version of Wave Terminal is ready to install.",
+                title: "Agentfile",
+                body: "新版本已下载完成，可以安装。",
             });
             updateNotification.on("click", () => {
                 fireAndForget(this.promptToInstallUpdate.bind(this));
@@ -161,7 +161,7 @@ export class Updater {
             if (userInput && !result.downloadPromise) {
                 const dialogOpts: Electron.MessageBoxOptions = {
                     type: "info",
-                    message: "There are currently no updates available.",
+                    message: "当前没有可用更新。",
                 };
                 if (focusedWaveWindow) {
                     dialog.showMessageBox(focusedWaveWindow, dialogOpts);
@@ -179,10 +179,10 @@ export class Updater {
     async promptToInstallUpdate() {
         const dialogOpts: Electron.MessageBoxOptions = {
             type: "info",
-            buttons: ["Restart", "Later"],
-            title: "Application Update",
+            buttons: ["立即重启", "稍后再说"],
+            title: "应用更新",
             message: process.platform === "win32" ? this.availableUpdateReleaseNotes : this.availableUpdateReleaseName,
-            detail: "A new version has been downloaded. Restart the application to apply the updates.",
+            detail: "新版本已经下载完成，重启应用后即可生效。",
         };
 
         const allWindows = getAllWaveWindows();

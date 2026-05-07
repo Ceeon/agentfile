@@ -77,6 +77,9 @@ func (impl *ServerImpl) remoteStreamFileDir(ctx context.Context, path string, by
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if fileutil.IsInternalTempProbeFileName(innerFileEntry.Name()) {
+			continue
+		}
 		innerFileInfoInt, err := innerFileEntry.Info()
 		if err != nil {
 			continue
@@ -190,12 +193,7 @@ func (impl *ServerImpl) RemoteStreamFileCommand(ctx context.Context, data wshrpc
 	return ch
 }
 
-// prepareDestForCopy resolves the final destination path and handles overwrite logic.
-// destPath is the raw destination path (may be a directory or file path).
-// srcBaseName is the basename of the source file (used when dest is a directory or ends with slash).
-// destHasSlash indicates if the original URI ended with a slash (forcing directory interpretation).
-// Returns the resolved path ready for writing.
-func prepareDestForCopy(destPath string, srcBaseName string, destHasSlash bool, overwrite bool) (string, error) {
+func resolveCopyTargetPath(destPath string, srcBaseName string, destHasSlash bool) (string, error) {
 	destInfo, err := os.Stat(destPath)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("cannot stat destination %q: %w", destPath, err)
@@ -211,12 +209,35 @@ func prepareDestForCopy(destPath string, srcBaseName string, destHasSlash bool, 
 		finalPath = destPath
 	}
 
+	return finalPath, nil
+}
+
+// prepareDestForCopy resolves the final destination path and handles overwrite logic.
+// destPath is the raw destination path (may be a directory or file path).
+// srcBaseName is the basename of the source file (used when dest is a directory or ends with slash).
+// destHasSlash indicates if the original URI ended with a slash (forcing directory interpretation).
+// Returns the resolved path ready for writing.
+func prepareDestForCopy(destPath string, srcBaseName string, destHasSlash bool, overwrite bool) (string, error) {
+	finalPath, err := resolveCopyTargetPath(destPath, srcBaseName, destHasSlash)
+	if err != nil {
+		return "", err
+	}
+
 	finalInfo, err := os.Stat(finalPath)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("cannot stat file %q: %w", finalPath, err)
 	}
 
 	if finalInfo != nil {
+		if finalInfo.IsDir() {
+			if !overwrite {
+				return "", fmt.Errorf(wshfs.MergeRequiredError, finalPath)
+			}
+			if err := os.RemoveAll(finalPath); err != nil {
+				return "", fmt.Errorf("cannot remove directory %q: %w", finalPath, err)
+			}
+			return finalPath, nil
+		}
 		if !overwrite {
 			return "", fmt.Errorf(wshfs.OverwriteRequiredError, finalPath)
 		}
@@ -228,15 +249,182 @@ func prepareDestForCopy(destPath string, srcBaseName string, destHasSlash bool, 
 	return finalPath, nil
 }
 
+func prepareDestForDirectoryCopy(destPath string, srcBaseName string, destHasSlash bool, overwrite bool, merge bool) (string, bool, error) {
+	finalPath, err := resolveCopyTargetPath(destPath, srcBaseName, destHasSlash)
+	if err != nil {
+		return "", false, err
+	}
+
+	finalInfo, err := os.Stat(finalPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", false, fmt.Errorf("cannot stat file %q: %w", finalPath, err)
+	}
+	if finalInfo == nil {
+		return finalPath, false, nil
+	}
+	if !finalInfo.IsDir() {
+		if !overwrite {
+			return "", false, fmt.Errorf(wshfs.OverwriteRequiredError, finalPath)
+		}
+		if err := os.Remove(finalPath); err != nil {
+			return "", false, fmt.Errorf("cannot remove file %q: %w", finalPath, err)
+		}
+		return finalPath, false, nil
+	}
+	if overwrite {
+		if err := os.RemoveAll(finalPath); err != nil {
+			return "", false, fmt.Errorf("cannot remove directory %q: %w", finalPath, err)
+		}
+		return finalPath, false, nil
+	}
+	if merge {
+		return finalPath, true, nil
+	}
+	return "", false, fmt.Errorf(wshfs.MergeRequiredError, finalPath)
+}
+
+func isSameOrDescendantPath(parentPath string, childPath string) bool {
+	rel, err := filepath.Rel(parentPath, childPath)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
+func copyRegularFilePath(srcPath string, destPath string, srcFileStat fs.FileInfo, overwrite bool) error {
+	destInfo, err := os.Stat(destPath)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("cannot stat destination %q: %w", destPath, err)
+	}
+	if destInfo != nil {
+		if destInfo.IsDir() {
+			if !overwrite {
+				return fmt.Errorf(wshfs.MergeRequiredError, destPath)
+			}
+			if err := os.RemoveAll(destPath); err != nil {
+				return fmt.Errorf("cannot remove directory %q: %w", destPath, err)
+			}
+		} else {
+			if !overwrite {
+				return fmt.Errorf(wshfs.OverwriteRequiredError, destPath)
+			}
+			if err := os.Remove(destPath); err != nil {
+				return fmt.Errorf("cannot remove file %q: %w", destPath, err)
+			}
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return fmt.Errorf("cannot create directory %q: %w", filepath.Dir(destPath), err)
+	}
+
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("cannot open file %q: %w", srcPath, err)
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcFileStat.Mode())
+	if err != nil {
+		return fmt.Errorf("cannot create file %q: %w", destPath, err)
+	}
+	defer destFile.Close()
+
+	if _, err = io.Copy(destFile, srcFile); err != nil {
+		return fmt.Errorf("cannot copy %q to %q: %w", srcPath, destPath, err)
+	}
+	return nil
+}
+
+func copyDirectoryContents(srcDir string, destDir string, overwrite bool, merge bool) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("cannot open dir %q: %w", srcDir, err)
+	}
+	for _, entry := range entries {
+		srcChild := filepath.Join(srcDir, entry.Name())
+		destChild := filepath.Join(destDir, entry.Name())
+
+		srcInfo, err := os.Stat(srcChild)
+		if err != nil {
+			return fmt.Errorf("cannot stat file %q: %w", srcChild, err)
+		}
+		if srcInfo.IsDir() {
+			destInfo, err := os.Stat(destChild)
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("cannot stat destination %q: %w", destChild, err)
+			}
+			if destInfo == nil {
+				if err := os.MkdirAll(destChild, srcInfo.Mode().Perm()); err != nil {
+					return fmt.Errorf("cannot create directory %q: %w", destChild, err)
+				}
+			} else if destInfo.IsDir() {
+				if !merge && !overwrite {
+					return fmt.Errorf(wshfs.MergeRequiredError, destChild)
+				}
+				if overwrite {
+					if err := os.RemoveAll(destChild); err != nil {
+						return fmt.Errorf("cannot remove directory %q: %w", destChild, err)
+					}
+					if err := os.MkdirAll(destChild, srcInfo.Mode().Perm()); err != nil {
+						return fmt.Errorf("cannot create directory %q: %w", destChild, err)
+					}
+				}
+			} else {
+				if !overwrite {
+					return fmt.Errorf(wshfs.OverwriteRequiredError, destChild)
+				}
+				if err := os.Remove(destChild); err != nil {
+					return fmt.Errorf("cannot remove file %q: %w", destChild, err)
+				}
+				if err := os.MkdirAll(destChild, srcInfo.Mode().Perm()); err != nil {
+					return fmt.Errorf("cannot create directory %q: %w", destChild, err)
+				}
+			}
+			if err := copyDirectoryContents(srcChild, destChild, overwrite, merge); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if srcInfo.Size() > RemoteFileTransferSizeLimit {
+			return fmt.Errorf("file %q size %d exceeds transfer limit of %d bytes", srcChild, srcInfo.Size(), RemoteFileTransferSizeLimit)
+		}
+		if err := copyRegularFilePath(srcChild, destChild, srcInfo, overwrite); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // remoteCopyFileInternal copies FROM local (this host) TO local (this host)
-// Only supports copying files, not directories
-func remoteCopyFileInternal(srcUri, destUri string, srcPathCleaned, destPathCleaned string, destHasSlash bool, overwrite bool) error {
+func remoteCopyFileInternal(srcUri, destUri string, srcPathCleaned, destPathCleaned string, destHasSlash bool, overwrite bool, merge bool) error {
 	srcFileStat, err := os.Stat(srcPathCleaned)
 	if err != nil {
 		return fmt.Errorf("cannot stat file %q: %w", srcPathCleaned, err)
 	}
 	if srcFileStat.IsDir() {
-		return fmt.Errorf("copying directories is not supported")
+		destDirPath, reuseExistingDir, err := prepareDestForDirectoryCopy(
+			destPathCleaned,
+			filepath.Base(srcPathCleaned),
+			destHasSlash,
+			overwrite,
+			merge,
+		)
+		if err != nil {
+			return err
+		}
+		if isSameOrDescendantPath(srcPathCleaned, destDirPath) {
+			return fmt.Errorf("cannot copy directory %q into itself", srcUri)
+		}
+		if !reuseExistingDir {
+			if err := os.MkdirAll(destDirPath, srcFileStat.Mode().Perm()); err != nil {
+				return fmt.Errorf("cannot create directory %q: %w", destDirPath, err)
+			}
+		}
+		return copyDirectoryContents(srcPathCleaned, destDirPath, overwrite, merge)
 	}
 	if srcFileStat.Size() > RemoteFileTransferSizeLimit {
 		return fmt.Errorf("file %q size %d exceeds transfer limit of %d bytes", srcPathCleaned, srcFileStat.Size(), RemoteFileTransferSizeLimit)
@@ -246,23 +434,7 @@ func remoteCopyFileInternal(srcUri, destUri string, srcPathCleaned, destPathClea
 	if err != nil {
 		return err
 	}
-
-	srcFile, err := os.Open(srcPathCleaned)
-	if err != nil {
-		return fmt.Errorf("cannot open file %q: %w", srcPathCleaned, err)
-	}
-	defer srcFile.Close()
-
-	destFile, err := os.OpenFile(destFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcFileStat.Mode())
-	if err != nil {
-		return fmt.Errorf("cannot create file %q: %w", destFilePath, err)
-	}
-	defer destFile.Close()
-
-	if _, err = io.Copy(destFile, srcFile); err != nil {
-		return fmt.Errorf("cannot copy %q to %q: %w", srcUri, destUri, err)
-	}
-	return nil
+	return copyRegularFilePath(srcPathCleaned, destFilePath, srcFileStat, overwrite)
 }
 
 // RemoteFileCopyCommand copies a file FROM somewhere TO here
@@ -274,9 +446,6 @@ func (impl *ServerImpl) RemoteFileCopyCommand(ctx context.Context, data wshrpc.C
 	}
 	if opts.Overwrite && opts.Merge {
 		return false, fmt.Errorf("cannot specify both overwrite and merge")
-	}
-	if opts.Recursive {
-		return false, fmt.Errorf("directory copying is not supported")
 	}
 	srcConn, err := connparse.ParseURIAndReplaceCurrentHost(ctx, data.SrcUri)
 	if err != nil {
@@ -291,7 +460,15 @@ func (impl *ServerImpl) RemoteFileCopyCommand(ctx context.Context, data wshrpc.C
 
 	if srcConn.Host == destConn.Host {
 		srcPathCleaned := filepath.Clean(wavebase.ExpandHomeDirSafe(srcConn.Path))
-		err := remoteCopyFileInternal(data.SrcUri, data.DestUri, srcPathCleaned, destPathCleaned, destHasSlash, opts.Overwrite)
+		err := remoteCopyFileInternal(
+			data.SrcUri,
+			data.DestUri,
+			srcPathCleaned,
+			destPathCleaned,
+			destHasSlash,
+			opts.Overwrite,
+			opts.Merge,
+		)
 		return false, err
 	}
 
@@ -376,6 +553,9 @@ func (impl *ServerImpl) RemoteListEntriesCommand(ctx context.Context, data wshrp
 				if d.IsDir() {
 					return nil
 				}
+				if fileutil.IsInternalTempProbeFileName(d.Name()) {
+					return nil
+				}
 				innerFilesEntries = append(innerFilesEntries, d)
 				return nil
 			})
@@ -391,6 +571,9 @@ func (impl *ServerImpl) RemoteListEntriesCommand(ctx context.Context, data wshrp
 			if ctx.Err() != nil {
 				ch <- wshutil.RespErr[wshrpc.CommandRemoteListEntriesRtnData](ctx.Err())
 				return
+			}
+			if fileutil.IsInternalTempProbeFileName(innerFileEntry.Name()) {
+				continue
 			}
 			innerFileInfoInt, err := innerFileEntry.Info()
 			if err != nil {
@@ -435,21 +618,11 @@ func statToFileInfo(fullPath string, finfo fs.FileInfo, extended bool) *wshrpc.F
 
 // fileInfo might be null
 func checkIsReadOnly(path string, fileInfo fs.FileInfo, exists bool) bool {
-	if !exists || fileInfo.Mode().IsDir() {
-		dirName := filepath.Dir(path)
-		randHexStr, err := utilfn.RandomHexString(12)
-		if err != nil {
-			// we're not sure, just return false
-			return false
-		}
-		tmpFileName := filepath.Join(dirName, "wsh-tmp-"+randHexStr)
-		fd, err := os.Create(tmpFileName)
-		if err != nil {
-			return true
-		}
-		utilfn.GracefulClose(fd, "checkIsReadOnly", tmpFileName)
-		os.Remove(tmpFileName)
-		return false
+	if !exists {
+		return checkDirIsReadOnly(filepath.Dir(path))
+	}
+	if fileInfo.Mode().IsDir() {
+		return checkDirIsReadOnly(path)
 	}
 	// try to open for writing, if this fails then it is read-only
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0666)

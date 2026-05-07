@@ -16,13 +16,13 @@ export const useUpdateNotifier = () => {
                 notification = {
                     id: "update-notification",
                     icon: "arrows-rotate",
-                    title: "Update Available",
-                    message: "A new update is available and ready to be installed.",
+                    title: "发现可用更新",
+                    message: "新版本已可用，随时可以开始安装。",
                     timestamp: new Date().toLocaleString(),
                     type: "update",
                     actions: [
                         {
-                            label: "Install Now",
+                            label: "立即安装",
                             actionKey: "installUpdate",
                             color: "green",
                             disabled: false,
@@ -35,13 +35,13 @@ export const useUpdateNotifier = () => {
                 notification = {
                     id: "update-notification",
                     icon: "arrows-rotate",
-                    title: "Downloading Update",
-                    message: "The update is currently being downloaded.",
+                    title: "正在下载更新",
+                    message: "更新正在下载中。",
                     timestamp: new Date().toLocaleString(),
                     type: "update",
                     actions: [
                         {
-                            label: "Downloading...",
+                            label: "下载中...",
                             actionKey: "",
                             color: "green",
                             disabled: true,
@@ -54,13 +54,13 @@ export const useUpdateNotifier = () => {
                 notification = {
                     id: "update-notification",
                     icon: "arrows-rotate",
-                    title: "Installing Update",
-                    message: "The update is currently being installed.",
+                    title: "正在安装更新",
+                    message: "更新正在安装中。",
                     timestamp: new Date().toLocaleString(),
                     type: "update",
                     actions: [
                         {
-                            label: "Installing...",
+                            label: "安装中...",
                             actionKey: "",
                             color: "green",
                             disabled: true,
@@ -73,13 +73,13 @@ export const useUpdateNotifier = () => {
                 notification = {
                     id: "update-notification",
                     icon: "circle-exclamation",
-                    title: "Update Error",
-                    message: "An error occurred during the update process.",
+                    title: "更新失败",
+                    message: "更新过程中发生错误。",
                     timestamp: new Date().toLocaleString(),
                     type: "update",
                     actions: [
                         {
-                            label: "Retry Update",
+                            label: "重试更新",
                             actionKey: "retryUpdate",
                             color: "green",
                             disabled: false,

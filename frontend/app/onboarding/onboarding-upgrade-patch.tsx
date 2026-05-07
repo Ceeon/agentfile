@@ -32,30 +32,30 @@ const versions: VersionConfig[] = [
     {
         version: "v0.12.1",
         content: () => <UpgradeOnboardingModal_v0_12_1_Content />,
-        nextText: "Next (v0.12.2)",
+        nextText: "下一版（v0.12.2）",
     },
     {
         version: "v0.12.2",
         content: () => <UpgradeOnboardingModal_v0_12_2_Content />,
-        prevText: "Prev (v0.12.1)",
-        nextText: "Next (v0.12.3)",
+        prevText: "上一版（v0.12.1）",
+        nextText: "下一版（v0.12.3）",
     },
     {
         version: "v0.12.5",
         content: () => <UpgradeOnboardingModal_v0_12_3_Content />,
-        prevText: "Prev (v0.12.2)",
-        nextText: "Next (v0.13.0)",
+        prevText: "上一版（v0.12.2）",
+        nextText: "下一版（v0.13.0）",
     },
     {
         version: "v0.13.0",
         content: () => <UpgradeOnboardingModal_v0_13_0_Content />,
-        prevText: "Prev (v0.12.5)",
-        nextText: "Next (v0.13.1)",
+        prevText: "上一版（v0.12.5）",
+        nextText: "下一版（v0.13.1）",
     },
     {
         version: "v0.13.1",
         content: () => <UpgradeOnboardingModal_v0_13_1_Content />,
-        prevText: "Prev (v0.13.0)",
+        prevText: "上一版（v0.13.0）",
     },
 ];
 
@@ -159,7 +159,7 @@ const UpgradeOnboardingPatch = () => {
                             </div>
                             <div className="flex flex-row items-center justify-center [&>button]:!px-5 [&>button]:!py-2 [&>button]:text-sm">
                                 <Button className="font-[600]" onClick={handleClose}>
-                                    Continue
+                                    继续
                                 </Button>
                             </div>
                             <div className="flex-1 flex justify-end">

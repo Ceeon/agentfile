@@ -100,12 +100,28 @@ func readDirCallback(input any, toolUseData *uctypes.UIMessageDataToolUse) (any,
 		return nil, err
 	}
 
+	entryList := make([]map[string]any, 0, len(result.Entries))
+	for _, entry := range result.Entries {
+		entryMap := map[string]any{
+			"name":          entry.Name,
+			"is_dir":        entry.Dir,
+			"is_symlink":    entry.Symlink,
+			"mode":          entry.Mode,
+			"modified":      entry.Modified,
+			"modified_time": entry.ModifiedTime,
+		}
+		if !entry.Dir {
+			entryMap["size"] = entry.Size
+		}
+		entryList = append(entryList, entryMap)
+	}
+
 	resultMap := map[string]any{
 		"path":          result.Path,
 		"absolute_path": result.AbsolutePath,
 		"entry_count":   result.EntryCount,
 		"total_entries": result.TotalEntries,
-		"entries":       result.Entries,
+		"entries":       entryList,
 	}
 
 	if result.Truncated {

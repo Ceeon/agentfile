@@ -108,6 +108,7 @@
                         text-overflow: ellipsis;
                         flex-shrink: 1;
                         min-width: 0;
+                        font-size: 13px;
                     }
 
                     .block-frame-blockid {
@@ -117,7 +118,7 @@
 
                 .block-frame-text {
                     font: var(--fixed-font);
-                    font-size: 11px;
+                    font-size: 14px;
                     opacity: 0.7;
                     flex-grow: 1;
 
@@ -129,7 +130,7 @@
                         direction: rtl;
                         text-align: left;
                         span {
-                            cursor: pointer;
+                            cursor: text;
 
                             &:hover {
                                 background: var(--highlight-bg-color);
@@ -204,6 +205,15 @@
                                 box-sizing: border-box;
                                 opacity: 0.7;
                                 font-weight: 500;
+                            }
+
+                            .block-frame-input.preview-filename {
+                                font: var(--fixed-font);
+                                font-size: 14px;
+                                direction: ltr;
+                                text-align: left;
+                                cursor: text;
+                                opacity: 0.9;
                             }
                         }
 

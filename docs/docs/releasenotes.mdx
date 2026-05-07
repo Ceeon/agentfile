@@ -6,6 +6,15 @@ sidebar_position: 200
 
 # Release Notes
 
+### v0.13.2-alpha.0 &mdash; Mar 18, 2026
+
+Patch release focused on directory preview refresh behavior and documentation updates.
+
+- [bugfix] Fixed a directory watcher accounting issue that could stop nested folders from auto-refreshing after opening both a parent directory and one of its children in the same block
+- [bugfix] Directory preview auto-refresh now reloads only the affected folder instead of redrawing the full expanded tree
+- [bugfix] Write-only file-system activity is ignored when sorting by name or type, reducing unnecessary refresh churn during builds, logs, and repeated file writes
+- Improved widget documentation for automatic directory refresh behavior, remote polling fallback, and manual refresh expectations
+
 ### v0.13.1 &mdash; Dec 16, 2025
 
 **Windows Improvements and Wave AI Enhancements**

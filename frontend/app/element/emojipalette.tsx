@@ -243,7 +243,7 @@ const EmojiPalette = memo(({ className, placement, onSelect }: EmojiPaletteProps
                         <InputLeftElement>
                             <i className="fa-sharp fa-solid fa-magnifying-glass"></i>
                         </InputLeftElement>
-                        <Input placeholder="Search emojis..." value={searchTerm} onChange={handleSearchChange} />
+                        <Input placeholder="搜索表情..." value={searchTerm} onChange={handleSearchChange} />
                     </InputGroup>
                     <div className="emoji-grid">
                         {filteredEmojis.length > 0 ? (

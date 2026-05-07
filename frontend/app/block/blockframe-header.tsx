@@ -5,14 +5,12 @@ import {
     blockViewToIcon,
     blockViewToName,
     getViewIconElem,
-    OptMagnifyButton,
     renderHeaderElements,
 } from "@/app/block/blockutil";
 import { ConnectionButton } from "@/app/block/connectionbutton";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { getConnStatusAtom, recordTEvent, WOS } from "@/app/store/global";
 import { modalsModel } from "@/store/modalmodel";
-import { globalStore } from "@/app/store/jotaiStore";
 import { uxCloseBlock } from "@/app/store/keymodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -26,36 +24,36 @@ import { BlockFrameProps } from "./blocktypes";
 
 function getDurableIconProps(jobStatus: BlockJobStatusData, connStatus: ConnStatus) {
     let color = "text-muted";
-    let titleText = "Durable Session";
+    let titleText = "持久会话";
     const status = jobStatus?.status;
     if (status === "connected") {
         color = "text-sky-500";
-        titleText = "Durable Session (Attached)";
+        titleText = "持久会话（已附着）";
     } else if (status === "disconnected") {
         color = "text-sky-300";
-        titleText = "Durable Session (Detached)";
+        titleText = "持久会话（已分离）";
     } else if (status === "init") {
         color = "text-sky-300";
-        titleText = "Durable Session (Starting)";
+        titleText = "持久会话（启动中）";
     } else if (status === "done") {
         color = "text-muted";
         const doneReason = jobStatus?.donereason;
         if (doneReason === "terminated") {
-            titleText = "Durable Session (Ended, Exited)";
+            titleText = "持久会话（已结束，已退出）";
         } else if (doneReason === "gone") {
-            titleText = "Durable Session (Ended, Environment Lost)";
+            titleText = "持久会话（已结束，环境已丢失）";
         } else if (doneReason === "startuperror") {
-            titleText = "Durable Session (Ended, Failed to Start)";
+            titleText = "持久会话（已结束，启动失败）";
         } else {
-            titleText = "Durable Session (Ended)";
+            titleText = "持久会话（已结束）";
         }
     } else if (status == null) {
         if (!connStatus?.connected) {
             color = "text-muted";
-            titleText = "Durable Session (Awaiting Connection)";
+            titleText = "持久会话（等待连接）";
         } else {
             color = "text-muted";
-            titleText = "No Session";
+            titleText = "无会话";
         }
     }
     return { color, titleText };
@@ -65,31 +63,17 @@ function handleHeaderContextMenu(
     e: React.MouseEvent<HTMLDivElement>,
     blockId: string,
     viewModel: ViewModel,
-    nodeModel: NodeModel,
+    _nodeModel: NodeModel,
     blockData: Block
 ) {
     e.preventDefault();
     e.stopPropagation();
-    const magnified = globalStore.get(nodeModel.isMagnified);
     let menu: ContextMenuItem[] = [
         {
-            label: magnified ? "Un-Magnify Block" : "Magnify Block",
-            click: () => {
-                nodeModel.toggleMagnify();
-            },
-        },
-        { type: "separator" },
-        {
-            label: "Rename Block",
+            label: "重命名区块",
             click: () => {
                 const currentName = blockData?.meta?.["frame:title"] || "";
                 modalsModel.pushModal("RenameBlockModal", { blockId, currentName });
-            },
-        },
-        {
-            label: "Copy BlockId",
-            click: () => {
-                navigator.clipboard.writeText(blockId);
             },
         },
     ];
@@ -98,7 +82,7 @@ function handleHeaderContextMenu(
     menu.push(
         { type: "separator" },
         {
-            label: "Close Block",
+            label: "关闭区块",
             click: () => uxCloseBlock(blockId),
         }
     );
@@ -136,7 +120,7 @@ const HeaderTextElems = React.memo(({ viewModel, blockData, preview, error }: He
             <div className="iconbutton disabled" key="controller-status" onClick={copyHeaderErr}>
                 <i
                     className="fa-sharp fa-solid fa-triangle-exclamation"
-                    title={"Error Rendering View Header: " + error.message}
+                    title={"渲染视图头部失败：" + error.message}
                 />
             </div>
         );
@@ -155,10 +139,7 @@ type HeaderEndIconsProps = {
 
 const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, blockData }: HeaderEndIconsProps) => {
     const endIconButtons = util.useAtomValueSafe(viewModel?.endIconButtons);
-    const magnified = jotai.useAtomValue(nodeModel.isMagnified);
     const ephemeral = jotai.useAtomValue(nodeModel.isEphemeral);
-    const numLeafs = jotai.useAtomValue(nodeModel.numLeafs);
-    const magnifyDisabled = numLeafs <= 1;
 
     const endIconsElem: React.ReactElement[] = [];
 
@@ -168,7 +149,7 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, blockData }:
     const settingsDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "cog",
-        title: "Settings",
+        title: "设置",
         click: (e) => handleHeaderContextMenu(e, blockId, viewModel, nodeModel, blockData),
     };
     endIconsElem.push(<IconButton key="settings" decl={settingsDecl} className="block-frame-settings" />);
@@ -176,27 +157,20 @@ const HeaderEndIcons = React.memo(({ viewModel, nodeModel, blockId, blockData }:
         const addToLayoutDecl: IconButtonDecl = {
             elemtype: "iconbutton",
             icon: "circle-plus",
-            title: "Add to Layout",
+            title: "加入布局",
             click: () => {
                 nodeModel.addEphemeralNodeToLayout();
             },
         };
         endIconsElem.push(<IconButton key="add-to-layout" decl={addToLayoutDecl} />);
     } else {
-        endIconsElem.push(
-            <OptMagnifyButton
-                key="unmagnify"
-                magnified={magnified}
-                toggleMagnify={nodeModel.toggleMagnify}
-                disabled={magnifyDisabled}
-            />
-        );
+        // No extra block-level action here.
     }
 
     const closeDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "xmark-large",
-        title: "Close",
+        title: "关闭",
         click: () => uxCloseBlock(nodeModel.blockId),
     };
     endIconsElem.push(<IconButton key="close" decl={closeDecl} className="block-frame-default-close" />);

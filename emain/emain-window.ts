@@ -6,7 +6,6 @@ import { RpcApi } from "@/app/store/wshclientapi";
 import { fireAndForget } from "@/util/util";
 import { BaseWindow, BaseWindowConstructorOptions, dialog, globalShortcut, ipcMain, screen } from "electron";
 import { globalEvents } from "emain/emain-events";
-import path from "path";
 import { debounce } from "throttle-debounce";
 import {
     getGlobalIsQuitting,
@@ -16,7 +15,7 @@ import {
     setWasInFg,
 } from "./emain-activity";
 import { log } from "./emain-log";
-import { getElectronAppBasePath, unamePlatform } from "./emain-platform";
+import { getAgentfileIconPath, unamePlatform } from "./emain-platform";
 import { getOrCreateWebViewForTab, getWaveTabViewByWebContentsId, WaveTabView } from "./emain-tabview";
 import { delay, ensureBoundsAreVisible, waveKeyToElectronKey } from "./emain-util";
 import { ElectronWshClient } from "./emain-wsh";
@@ -28,8 +27,47 @@ export type WindowOpts = {
     foregroundWindow?: boolean;
 };
 
+type FileWindowRequest = {
+    filePath: string;
+    connection?: string | null;
+};
+
 export const MinWindowWidth = 800;
 export const MinWindowHeight = 500;
+const DefaultWindowBgColor = "#222222";
+
+function resolveWindowBgColor(settings: Record<string, any>): string {
+    const configuredBg = settings?.["window:bgcolor"];
+    if (typeof configuredBg === "string" && configuredBg.trim() !== "") {
+        return configuredBg;
+    }
+    return DefaultWindowBgColor;
+}
+
+function isLightHexColor(color: string): boolean {
+    if (typeof color !== "string") {
+        return false;
+    }
+    const match = color.trim().match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
+    if (!match) {
+        return false;
+    }
+    let hex = match[1];
+    if (hex.length === 3) {
+        hex = hex
+            .split("")
+            .map((char) => char + char)
+            .join("");
+    }
+    if (hex.length === 8) {
+        hex = hex.slice(0, 6);
+    }
+    const red = parseInt(hex.slice(0, 2), 16);
+    const green = parseInt(hex.slice(2, 4), 16);
+    const blue = parseInt(hex.slice(4, 6), 16);
+    const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+    return luminance > 0.6;
+}
 
 export function calculateWindowBounds(
     winSize?: { width?: number; height?: number },
@@ -145,6 +183,8 @@ export class WaveBrowserWindow extends BaseWindow {
 
     constructor(waveWindow: WaveWindow, fullConfig: FullConfigType, opts: WindowOpts) {
         const settings = fullConfig?.settings;
+        const baseBgColor = resolveWindowBgColor(settings);
+        const titleSymbolColor = isLightHexColor(baseBgColor) ? "black" : "white";
 
         console.log("create win", waveWindow.oid);
         const winBounds = calculateWindowBounds(waveWindow.winsize, waveWindow.pos, settings);
@@ -170,26 +210,27 @@ export class WaveBrowserWindow extends BaseWindow {
             } else if (isBlur) {
                 winOpts.vibrancy = "fullscreen-ui";
             } else {
-                winOpts.backgroundColor = "#222222";
+                winOpts.backgroundColor = baseBgColor;
             }
         } else if (opts.unamePlatform === "linux") {
             winOpts.titleBarStyle = settings["window:nativetitlebar"] ? "default" : "hidden";
             winOpts.titleBarOverlay = {
-                symbolColor: "white",
+                symbolColor: titleSymbolColor,
                 color: "#00000000",
             };
-            winOpts.icon = path.join(getElectronAppBasePath(), "public/logos/wave-logo-dark.png");
+            winOpts.icon = getAgentfileIconPath();
             winOpts.autoHideMenuBar = !settings?.["window:showmenubar"];
             if (isTransparent) {
                 winOpts.transparent = true;
             } else {
-                winOpts.backgroundColor = "#222222";
+                winOpts.backgroundColor = baseBgColor;
             }
         } else if (opts.unamePlatform === "win32") {
+            winOpts.icon = getAgentfileIconPath();
             winOpts.titleBarStyle = "hidden";
             winOpts.titleBarOverlay = {
-                color: "#222222",
-                symbolColor: "#c3c8c2",
+                color: baseBgColor,
+                symbolColor: titleSymbolColor == "black" ? "#1f2328" : "#c3c8c2",
                 height: 32,
             };
             if (isTransparent) {
@@ -197,7 +238,7 @@ export class WaveBrowserWindow extends BaseWindow {
             } else if (isBlur) {
                 winOpts.backgroundMaterial = "acrylic";
             } else {
-                winOpts.backgroundColor = "#222222";
+                winOpts.backgroundColor = baseBgColor;
             }
         }
 
@@ -297,21 +338,6 @@ export class WaveBrowserWindow extends BaseWindow {
                 const numWindows = waveWindowMap.size;
                 const fullConfig = await RpcApi.GetFullConfigCommand(ElectronWshClient);
                 if (numWindows > 1 || !fullConfig.settings["window:savelastwindow"]) {
-                    if (fullConfig.settings["window:confirmclose"]) {
-                        const workspace = await WorkspaceService.GetWorkspace(this.workspaceId);
-                        if (isNonEmptyUnsavedWorkspace(workspace)) {
-                            const choice = dialog.showMessageBoxSync(this, {
-                                type: "question",
-                                buttons: ["Cancel", "Close Window"],
-                                title: "Confirm",
-                                message:
-                                    "Window has unsaved tabs, closing window will delete existing tabs.\n\nContinue?",
-                            });
-                            if (choice === 0) {
-                                return;
-                            }
-                        }
-                    }
                     this.deleteAllowed = true;
                 }
                 this.canClose = true;
@@ -721,13 +747,6 @@ ipcMain.on("create-tab", async (event, opts) => {
     return null;
 });
 
-ipcMain.on("set-waveai-open", (event, isOpen: boolean) => {
-    const tabView = getWaveTabViewByWebContentsId(event.sender.id);
-    if (tabView) {
-        tabView.isWaveAIOpen = isOpen;
-    }
-});
-
 ipcMain.on("close-tab", async (event, workspaceId, tabId) => {
     const ww = getWaveWindowByWorkspaceId(workspaceId);
     if (ww == null) {
@@ -777,9 +796,9 @@ ipcMain.on("delete-workspace", (event, workspaceId) => {
 
         const choice = dialog.showMessageBoxSync(this, {
             type: "question",
-            buttons: ["Cancel", "Delete Workspace"],
-            title: "Confirm",
-            message: `Deleting workspace will also delete its contents.\n\nContinue?`,
+            buttons: ["取消", "删除工作区"],
+            title: "确认",
+            message: `删除工作区会同时删除其中的内容。\n\n确定继续吗？`,
         });
         if (choice === 0) {
             console.log("user cancelled workspace delete", workspaceId, ww?.waveWindowId);
@@ -829,6 +848,18 @@ export async function createNewWaveWindow() {
         isPrimaryStartupWindow: false,
     });
     newBrowserWindow.show();
+}
+
+export async function openFileInNewTab(webContentsId: number, request: FileWindowRequest) {
+    if (!request?.filePath) {
+        return;
+    }
+    const waveWindow = getWaveWindowByWebContentsId(webContentsId);
+    if (!waveWindow) {
+        return;
+    }
+    await waveWindow.queueCreateTab();
+    waveWindow.activeTabView?.webContents.send("open-file-in-current-window", request);
 }
 
 export async function relaunchBrowserWindows() {

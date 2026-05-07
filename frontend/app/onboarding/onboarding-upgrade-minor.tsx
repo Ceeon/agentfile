@@ -124,7 +124,7 @@ const UpgradeOnboardingMinor = () => {
                     <div className="flex justify-center">
                         <Logo />
                     </div>
-                    <div className="text-center text-[25px] font-normal text-foreground">Welcome to Wave v0.13!</div>
+                    <div className="text-center text-[25px] font-normal text-foreground">欢迎使用 Wave v0.13！</div>
                 </header>
                 <OverlayScrollbarsComponent
                     className="flex-1 overflow-y-auto min-h-0"
@@ -172,13 +172,13 @@ const UpgradeOnboardingMinor = () => {
                 <footer className="unselectable flex-shrink-0 mt-4">
                     <div className="flex flex-row items-center justify-center gap-2.5 [&>button]:!px-5 [&>button]:!py-2 [&>button]:text-sm [&>button]:!h-[37px]">
                         <Button className="outlined grey font-[600]" onClick={handleAlreadyStarred}>
-                            🙏 Already Starred
+                            🙏 已点亮 Star
                         </Button>
                         <Button className="outlined green font-[600]" onClick={handleStarClick}>
-                            ⭐ Star Now
+                            ⭐ 立即点亮 Star
                         </Button>
                         <Button className="outlined grey font-[600]" onClick={handleMaybeLater}>
-                            Maybe Later
+                            稍后再说
                         </Button>
                     </div>
                 </footer>

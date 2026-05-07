@@ -68,7 +68,7 @@ interface WaveModalProps {
     children: React.ReactNode;
 }
 
-function WaveModal({ title, description, onSubmit, onCancel, buttonLabel = "Ok", children }: WaveModalProps) {
+function WaveModal({ title, description, onSubmit, onCancel, buttonLabel = "确定", children }: WaveModalProps) {
     return (
         <Modal onClickOut={onCancel}>
             <ModalHeader title={title} description={description} />

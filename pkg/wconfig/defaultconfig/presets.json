@@ -4,6 +4,15 @@
         "display:order": -1,
         "bg:*": true
     },
+    "bg@white": {
+        "display:name": "White",
+        "display:order": 1,
+        "bg:*": true,
+        "bg": "#ffffff",
+        "bg:opacity": 1,
+        "bg:text": "rgb(22, 27, 34)",
+        "bg:activebordercolor": "rgba(15, 23, 42, 0.35)"
+    },
     "bg@rainbow": {
         "display:name": "Rainbow",
         "display:order": 2.1,

@@ -6,6 +6,7 @@ import type { TabModel } from "@/app/store/tab-model";
 import { getApi, getBlockMetaKeyAtom, WOS } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { RpcApi } from "@/app/store/wshclientapi";
+import { SettingsVisualContent } from "@/app/view/waveconfig/settingsvisual";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { SecretsContent } from "@/app/view/waveconfig/secretscontent";
 import { WaveConfigView } from "@/app/view/waveconfig/waveconfig";
@@ -59,7 +60,7 @@ function validateWaveAiJson(parsed: any): ValidationResult {
     for (const key of keys) {
         if (!keyPattern.test(key)) {
             return {
-                error: `Invalid key "${key}": keys must only contain letters, numbers, underscores, @, dots, and hyphens`,
+                error: `无效键名“${key}”：键名只能包含字母、数字、下划线、@、点和连字符`,
             };
         }
     }
@@ -68,39 +69,40 @@ function validateWaveAiJson(parsed: any): ValidationResult {
 
 const configFiles: ConfigFile[] = [
     {
-        name: "General",
+        name: "通用",
         path: "settings.json",
         language: "json",
         docsUrl: "https://docs.waveterm.dev/config",
         hasJsonView: true,
+        visualComponent: SettingsVisualContent,
     },
     {
-        name: "Connections",
+        name: "连接",
         path: "connections.json",
         language: "json",
         docsUrl: "https://docs.waveterm.dev/connections",
-        description: isWindows() ? "SSH hosts and WSL distros" : "SSH hosts",
+        description: isWindows() ? "SSH 主机与 WSL 发行版" : "SSH 主机",
         hasJsonView: true,
     },
     {
-        name: "Sidebar Widgets",
+        name: "侧边栏组件",
         path: "widgets.json",
         language: "json",
         docsUrl: "https://docs.waveterm.dev/customwidgets",
         hasJsonView: true,
     },
     {
-        name: "Wave AI Modes",
+        name: "AI 模式",
         path: "waveai.json",
         language: "json",
-        description: "Local models and BYOK",
+        description: "本地模型与自带密钥",
         docsUrl: "https://docs.waveterm.dev/waveai-modes",
         validator: validateWaveAiJson,
         hasJsonView: true,
         // visualComponent: WaveAIVisualContent,
     },
     {
-        name: "Tab Backgrounds",
+        name: "标签背景",
         path: "presets/bg.json",
         language: "json",
         docsUrl: "https://docs.waveterm.dev/presets#background-configurations",
@@ -108,7 +110,7 @@ const configFiles: ConfigFile[] = [
         hasJsonView: true,
     },
     {
-        name: "Secrets",
+        name: "密钥",
         path: "secrets",
         isSecrets: true,
         hasJsonView: false,
@@ -118,14 +120,14 @@ const configFiles: ConfigFile[] = [
 
 const deprecatedConfigFiles: ConfigFile[] = [
     {
-        name: "Presets",
+        name: "预设",
         path: "presets.json",
         language: "json",
         deprecated: true,
         hasJsonView: true,
     },
     {
-        name: "AI Presets",
+        name: "AI 预设",
         path: "presets/ai.json",
         language: "json",
         deprecated: true,
@@ -139,7 +141,7 @@ export class WaveConfigViewModel implements ViewModel {
     blockId: string;
     viewType = "waveconfig";
     viewIcon = atom("gear");
-    viewName = atom("Wave Config");
+    viewName = atom("配置");
     viewComponent = WaveConfigView;
     noPadding = atom(true);
     nodeModel: BlockNodeModel;
@@ -299,7 +301,7 @@ export class WaveConfigViewModel implements ViewModel {
                 meta: { file: file.path },
             });
         } catch (err) {
-            globalStore.set(this.errorMessageAtom, `Failed to load ${file.name}: ${err.message || String(err)}`);
+            globalStore.set(this.errorMessageAtom, `加载 ${file.name} 失败：${err.message || String(err)}`);
             globalStore.set(this.fileContentAtom, "");
             globalStore.set(this.originalContentAtom, "");
         } finally {
@@ -330,7 +332,7 @@ export class WaveConfigViewModel implements ViewModel {
             } catch (err) {
                 globalStore.set(
                     this.errorMessageAtom,
-                    `Failed to save ${selectedFile.name}: ${err.message || String(err)}`
+                    `保存 ${selectedFile.name} 失败：${err.message || String(err)}`
                 );
             } finally {
                 globalStore.set(this.isSavingAtom, false);
@@ -342,7 +344,7 @@ export class WaveConfigViewModel implements ViewModel {
             const parsed = JSON.parse(fileContent);
 
             if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
-                globalStore.set(this.validationErrorAtom, "JSON must be an object, not an array, primitive, or null");
+                globalStore.set(this.validationErrorAtom, "JSON 必须是对象，不能是数组、基础类型或 null");
                 return;
             }
 
@@ -372,13 +374,13 @@ export class WaveConfigViewModel implements ViewModel {
             } catch (err) {
                 globalStore.set(
                     this.errorMessageAtom,
-                    `Failed to save ${selectedFile.name}: ${err.message || String(err)}`
+                    `保存 ${selectedFile.name} 失败：${err.message || String(err)}`
                 );
             } finally {
                 globalStore.set(this.isSavingAtom, false);
             }
         } catch (err) {
-            globalStore.set(this.validationErrorAtom, `Invalid JSON: ${err.message || String(err)}`);
+            globalStore.set(this.validationErrorAtom, `JSON 无效：${err.message || String(err)}`);
         }
     }
 
@@ -396,13 +398,13 @@ export class WaveConfigViewModel implements ViewModel {
             if (backend === "basic_text" || backend === "unknown") {
                 globalStore.set(
                     this.storageBackendErrorAtom,
-                    "No appropriate secret manager found. Cannot manage secrets securely."
+                    "未找到合适的密钥管理器，无法安全管理密钥。"
                 );
             } else {
                 globalStore.set(this.storageBackendErrorAtom, null);
             }
         } catch (error) {
-            globalStore.set(this.storageBackendErrorAtom, `Error checking storage backend: ${error.message}`);
+            globalStore.set(this.storageBackendErrorAtom, `检查密钥存储后端失败：${error.message}`);
         }
     }
 
@@ -414,7 +416,7 @@ export class WaveConfigViewModel implements ViewModel {
             const names = await RpcApi.GetSecretsNamesCommand(TabRpcClient);
             globalStore.set(this.secretNamesAtom, names || []);
         } catch (error) {
-            globalStore.set(this.errorMessageAtom, `Failed to load secrets: ${error.message}`);
+            globalStore.set(this.errorMessageAtom, `加载密钥列表失败：${error.message}`);
         } finally {
             globalStore.set(this.isLoadingAtom, false);
         }
@@ -449,10 +451,10 @@ export class WaveConfigViewModel implements ViewModel {
                 globalStore.set(this.secretValueAtom, value);
                 globalStore.set(this.secretShownAtom, true);
             } else {
-                globalStore.set(this.errorMessageAtom, `Secret not found: ${selectedSecret}`);
+                globalStore.set(this.errorMessageAtom, `未找到密钥：${selectedSecret}`);
             }
         } catch (error) {
-            globalStore.set(this.errorMessageAtom, `Failed to load secret: ${error.message}`);
+            globalStore.set(this.errorMessageAtom, `加载密钥失败：${error.message}`);
         } finally {
             globalStore.set(this.isLoadingAtom, false);
         }
@@ -483,7 +485,7 @@ export class WaveConfigViewModel implements ViewModel {
             );
             this.closeSecretView();
         } catch (error) {
-            globalStore.set(this.errorMessageAtom, `Failed to save secret: ${error.message}`);
+            globalStore.set(this.errorMessageAtom, `保存密钥失败：${error.message}`);
         } finally {
             globalStore.set(this.isLoadingAtom, false);
         }
@@ -504,7 +506,7 @@ export class WaveConfigViewModel implements ViewModel {
             this.closeSecretView();
             await this.refreshSecrets();
         } catch (error) {
-            globalStore.set(this.errorMessageAtom, `Failed to delete secret: ${error.message}`);
+            globalStore.set(this.errorMessageAtom, `删除密钥失败：${error.message}`);
         } finally {
             globalStore.set(this.isLoadingAtom, false);
         }
@@ -529,21 +531,21 @@ export class WaveConfigViewModel implements ViewModel {
         const value = globalStore.get(this.newSecretValueAtom);
 
         if (!name) {
-            globalStore.set(this.errorMessageAtom, "Secret name cannot be empty");
+            globalStore.set(this.errorMessageAtom, "密钥名称不能为空");
             return;
         }
 
         if (!SecretNameRegex.test(name)) {
             globalStore.set(
                 this.errorMessageAtom,
-                "Invalid secret name: must start with a letter and contain only letters, numbers, and underscores"
+                "密钥名称无效：必须以字母开头，且只能包含字母、数字和下划线"
             );
             return;
         }
 
         const existingNames = globalStore.get(this.secretNamesAtom);
         if (existingNames.includes(name)) {
-            globalStore.set(this.errorMessageAtom, `Secret "${name}" already exists`);
+            globalStore.set(this.errorMessageAtom, `密钥“${name}”已存在`);
             return;
         }
 
@@ -567,7 +569,7 @@ export class WaveConfigViewModel implements ViewModel {
             globalStore.set(this.newSecretValueAtom, "");
             await this.refreshSecrets();
         } catch (error) {
-            globalStore.set(this.errorMessageAtom, `Failed to add secret: ${error.message}`);
+            globalStore.set(this.errorMessageAtom, `新增密钥失败：${error.message}`);
         } finally {
             globalStore.set(this.isLoadingAtom, false);
         }

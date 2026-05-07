@@ -3,7 +3,6 @@
 
 import { RpcApi } from "@/app/store/wshclientapi";
 import * as electron from "electron";
-import { focusedBuilderWindow, getAllBuilderWindows } from "emain/emain-builder";
 import { globalEvents } from "emain/emain-events";
 import { sprintf } from "sprintf-js";
 import * as services from "../frontend/app/store/services";
@@ -33,6 +32,7 @@ import {
     getWaveConfigDir,
     getWaveDataDir,
     isDev,
+    setAgentfileDockIcon,
     unameArch,
     unamePlatform,
 } from "./emain-platform";
@@ -55,12 +55,11 @@ import { configureAutoUpdater, updater } from "./updater";
 
 const electronApp = electron.app;
 
-let confirmQuit = false;
-
 const waveDataDir = getWaveDataDir();
 const waveConfigDir = getWaveConfigDir();
 
-electron.nativeTheme.themeSource = "dark";
+electron.nativeTheme.themeSource = "light";
+delete process.env.CLAUDECODE;
 
 console.log = log;
 console.log(
@@ -167,8 +166,6 @@ function logActiveState() {
         const astate = getActivityState();
         const activity: ActivityUpdate = { openminutes: 1 };
         const ww = focusedWaveWindow;
-        const activeTabView = ww?.activeTabView;
-        const isWaveAIOpen = activeTabView?.isWaveAIOpen ?? false;
 
         if (astate.wasInFg) {
             activity.fgminutes = 1;
@@ -190,12 +187,6 @@ function logActiveState() {
         };
         if (termCmdCount > 0) {
             props["activity:termcommandsrun"] = termCmdCount;
-        }
-        if (astate.wasActive && isWaveAIOpen) {
-            props["activity:waveaiactiveminutes"] = 1;
-        }
-        if (astate.wasInFg && isWaveAIOpen) {
-            props["activity:waveaifgminutes"] = 1;
         }
 
         try {
@@ -248,31 +239,6 @@ electronApp.on("window-all-closed", () => {
 });
 electronApp.on("before-quit", (e) => {
     const allWindows = getAllWaveWindows();
-    const allBuilders = getAllBuilderWindows();
-    if (
-        confirmQuit &&
-        !getForceQuit() &&
-        !getUserConfirmedQuit() &&
-        (allWindows.length > 0 || allBuilders.length > 0) &&
-        !getIsWaveSrvDead() &&
-        !process.env.WAVETERM_NOCONFIRMQUIT
-    ) {
-        e.preventDefault();
-        const choice = electron.dialog.showMessageBoxSync(null, {
-            type: "question",
-            buttons: ["Cancel", "Quit"],
-            title: "Confirm Quit",
-            message: "Are you sure you want to quit Wave Terminal?",
-            defaultId: 0,
-            cancelId: 0,
-        });
-        if (choice === 0) {
-            return;
-        }
-        setUserConfirmedQuit(true);
-        electronApp.quit();
-        return;
-    }
     setGlobalIsQuitting(true);
     updater?.stop();
     if (unamePlatform == "win32") {
@@ -288,9 +254,6 @@ electronApp.on("before-quit", (e) => {
     e.preventDefault();
     for (const window of allWindows) {
         hideWindowWithCatch(window);
-    }
-    for (const builder of allBuilders) {
-        builder.hide();
     }
     if (getIsWaveSrvDead()) {
         console.log("wavesrv is dead, quitting immediately");
@@ -341,16 +304,13 @@ process.on("uncaughtException", (error) => {
 });
 
 let lastWaveWindowCount = 0;
-let lastIsBuilderWindowActive = false;
 globalEvents.on("windows-updated", () => {
     const wwCount = getAllWaveWindows().length;
-    const isBuilderActive = focusedBuilderWindow != null;
-    if (wwCount == lastWaveWindowCount && isBuilderActive == lastIsBuilderWindowActive) {
+    if (wwCount == lastWaveWindowCount) {
         return;
     }
     lastWaveWindowCount = wwCount;
-    lastIsBuilderWindowActive = isBuilderActive;
-    console.log("windows-updated", wwCount, "builder-active:", isBuilderActive);
+    console.log("windows-updated", wwCount);
     makeAndSetAppMenu();
 });
 
@@ -377,6 +337,7 @@ async function appMain() {
     const ready = await getWaveSrvReady();
     console.log("wavesrv ready signal received", ready, Date.now() - startTs, "ms");
     await electronApp.whenReady();
+    setAgentfileDockIcon();
     configureAuthKeyRequestInjection(electron.session.defaultSession);
     initIpcHandlers();
 
@@ -390,9 +351,6 @@ async function appMain() {
     }
     const fullConfig = await RpcApi.GetFullConfigCommand(ElectronWshClient);
     checkIfRunningUnderARM64Translation(fullConfig);
-    if (fullConfig?.settings?.["app:confirmquit"] != null) {
-        confirmQuit = fullConfig.settings["app:confirmquit"];
-    }
     ensureHotSpareTab(fullConfig);
     await relaunchBrowserWindows();
     setTimeout(runActiveTimer, 5000); // start active timer, wait 5s just to be safe

@@ -9,12 +9,7 @@ import {
     FullSubBlockProps,
     SubBlockProps,
 } from "@/app/block/blocktypes";
-import { AiFileDiffViewModel } from "@/app/view/aifilediff/aifilediff";
-import { LauncherViewModel } from "@/app/view/launcher/launcher";
 import { PreviewModel } from "@/app/view/preview/preview-model";
-import { SysinfoViewModel } from "@/app/view/sysinfo/sysinfo";
-import { TsunamiViewModel } from "@/app/view/tsunami/tsunami";
-import { VDomModel } from "@/app/view/vdom/vdom-model";
 import { ErrorBoundary } from "@/element/errorboundary";
 import { CenteredDiv } from "@/element/quickelems";
 import { useDebouncedNodeInnerRect } from "@/layout/index";
@@ -29,38 +24,39 @@ import { useTabModel } from "@/app/store/tab-model";
 import { getWaveObjectAtom, makeORef, useWaveObjectValue } from "@/store/wos";
 import { focusedBlockId, getElemAsStr } from "@/util/focusutil";
 import { isBlank, useAtomValueSafe } from "@/util/util";
-import { HelpViewModel } from "@/view/helpview/helpview";
-import { TermViewModel } from "@/view/term/term-model";
-import { WaveAiModel } from "@/view/waveai/waveai";
-import { WebViewModel } from "@/view/webview/webview";
 import clsx from "clsx";
 import { atom, useAtomValue } from "jotai";
 import { memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { QuickTipsViewModel } from "../view/quicktipsview/quicktipsview";
 import { WaveConfigViewModel } from "../view/waveconfig/waveconfig-model";
 import "./block.scss";
 import { BlockFrame } from "./blockframe";
 import { blockViewToIcon, blockViewToName } from "./blockutil";
 
 const BlockRegistry: Map<string, ViewModelClass> = new Map();
-BlockRegistry.set("term", TermViewModel);
 BlockRegistry.set("preview", PreviewModel);
-BlockRegistry.set("web", WebViewModel);
-BlockRegistry.set("waveai", WaveAiModel);
-BlockRegistry.set("cpuplot", SysinfoViewModel);
-BlockRegistry.set("sysinfo", SysinfoViewModel);
-BlockRegistry.set("vdom", VDomModel);
-BlockRegistry.set("tips", QuickTipsViewModel);
-BlockRegistry.set("help", HelpViewModel);
-BlockRegistry.set("launcher", LauncherViewModel);
-BlockRegistry.set("tsunami", TsunamiViewModel);
-BlockRegistry.set("aifilediff", AiFileDiffViewModel);
 BlockRegistry.set("waveconfig", WaveConfigViewModel);
+
+const RetiredBlockViews = new Set([
+    "term",
+    "web",
+    "waveai",
+    "cpuplot",
+    "sysinfo",
+    "vdom",
+    "tips",
+    "help",
+    "launcher",
+    "tsunami",
+    "aifilediff",
+]);
 
 function makeViewModel(blockId: string, blockView: string, nodeModel: BlockNodeModel, tabModel: TabModel): ViewModel {
     const ctor = BlockRegistry.get(blockView);
     if (ctor != null) {
         return new ctor(blockId, nodeModel, tabModel);
+    }
+    if (RetiredBlockViews.has(blockView)) {
+        return new PreviewModel(blockId, nodeModel, tabModel);
     }
     return makeDefaultViewModel(blockId, blockView);
 }
@@ -73,10 +69,10 @@ function getViewElem(
     viewModel: ViewModel
 ): React.ReactElement {
     if (isBlank(blockView)) {
-        return <CenteredDiv>No View</CenteredDiv>;
+        return <CenteredDiv>无视图</CenteredDiv>;
     }
     if (viewModel.viewComponent == null) {
-        return <CenteredDiv>No View Component</CenteredDiv>;
+        return <CenteredDiv>缺少视图组件</CenteredDiv>;
     }
     const VC = viewModel.viewComponent;
     return <VC key={blockId} blockId={blockId} blockRef={blockRef} contentRef={contentRef} model={viewModel} />;
@@ -132,7 +128,7 @@ const BlockSubBlock = memo(({ nodeModel, viewModel }: FullSubBlockProps) => {
     return (
         <div key="content" className={clsx("block-content", { "block-no-padding": noPadding })} ref={contentRef}>
             <ErrorBoundary>
-                <Suspense fallback={<CenteredDiv>Loading...</CenteredDiv>}>{viewElem}</Suspense>
+                <Suspense fallback={<CenteredDiv>加载中...</CenteredDiv>}>{viewElem}</Suspense>
             </ErrorBoundary>
         </div>
     );
@@ -253,7 +249,7 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
                 style={blockContentStyle}
             >
                 <ErrorBoundary>
-                    <Suspense fallback={<CenteredDiv>Loading...</CenteredDiv>}>{viewElem}</Suspense>
+                    <Suspense fallback={<CenteredDiv>加载中...</CenteredDiv>}>{viewElem}</Suspense>
                 </ErrorBoundary>
             </div>
         </BlockFrame>

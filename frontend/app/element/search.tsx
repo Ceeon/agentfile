@@ -116,7 +116,7 @@ const SearchComponent = ({
     const prevDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "chevron-up",
-        title: "Previous Result (Shift+Enter)",
+        title: "上一个结果（Shift+Enter）",
         disabled: numResults === 0,
         click: onPrevWrapper,
     };
@@ -124,7 +124,7 @@ const SearchComponent = ({
     const nextDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "chevron-down",
-        title: "Next Result (Enter)",
+        title: "下一个结果（Enter）",
         disabled: numResults === 0,
         click: onNextWrapper,
     };
@@ -132,13 +132,13 @@ const SearchComponent = ({
     const closeDecl: IconButtonDecl = {
         elemtype: "iconbutton",
         icon: "xmark-large",
-        title: "Close (Esc)",
+        title: "关闭（Esc）",
         click: () => setIsOpen(false),
     };
 
-    const regexDecl = createToggleButtonDecl(regexAtom, "custom@regex", "Regular Expression");
-    const wholeWordDecl = createToggleButtonDecl(wholeWordAtom, "custom@whole-word", "Whole Word");
-    const caseSensitiveDecl = createToggleButtonDecl(caseSensitiveAtom, "custom@case-sensitive", "Case Sensitive");
+    const regexDecl = createToggleButtonDecl(regexAtom, "custom@regex", "正则表达式");
+    const wholeWordDecl = createToggleButtonDecl(wholeWordAtom, "custom@whole-word", "全词匹配");
+    const caseSensitiveDecl = createToggleButtonDecl(caseSensitiveAtom, "custom@case-sensitive", "区分大小写");
 
     return (
         <>
@@ -146,7 +146,7 @@ const SearchComponent = ({
                 <FloatingPortal>
                     <div className="search-container" style={{ ...floatingStyles }} ref={refs.setFloating}>
                         <Input
-                            placeholder="Search"
+                            placeholder="搜索"
                             value={search}
                             onChange={setSearch}
                             onKeyDown={onKeyDown}
@@ -155,7 +155,7 @@ const SearchComponent = ({
                         <div
                             className={clsx("search-results", { hidden: numResults === 0 })}
                             aria-live="polite"
-                            aria-label="Search Results"
+                            aria-label="搜索结果"
                         >
                             {index + 1}/{numResults}
                         </div>

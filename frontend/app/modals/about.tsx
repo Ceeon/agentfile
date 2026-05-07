@@ -21,18 +21,18 @@ const AboutModal = ({}: AboutModalProps) => {
             <div className="flex flex-col gap-[26px] w-full">
                 <div className="flex flex-col items-center justify-center gap-4 self-stretch w-full text-center">
                     <Logo />
-                    <div className="text-[25px]">Wave Terminal</div>
+                    <div className="text-[25px]">Agentfile</div>
                     <div className="leading-5">
-                        Open-Source AI-Native Terminal
+                        开源的 AI 文件工作台
                         <br />
-                        Built for Seamless Workflows
+                        为连续工作流而设计
                     </div>
                 </div>
                 <div className="items-center gap-4 self-stretch w-full text-center">
-                    Client Version {details.version} ({isDev() ? "dev-" : ""}
+                    客户端版本 {details.version} ({isDev() ? "dev-" : ""}
                     {details.buildTime})
                     <br />
-                    Update Channel: {updaterChannel}
+                    更新通道：{updaterChannel}
                 </div>
                 <div className="flex items-start gap-[10px] self-stretch w-full text-center">
                     <a
@@ -41,7 +41,7 @@ const AboutModal = ({}: AboutModalProps) => {
                         rel="noopener"
                         className="inline-flex items-center px-4 py-2 rounded border border-border hover:bg-hoverbg transition-colors duration-200"
                     >
-                        <i className="fa-brands fa-github mr-2"></i>Github
+                        <i className="fa-brands fa-github mr-2"></i>GitHub
                     </a>
                     <a
                         href="https://www.waveterm.dev/?ref=about"
@@ -49,7 +49,7 @@ const AboutModal = ({}: AboutModalProps) => {
                         rel="noopener"
                         className="inline-flex items-center px-4 py-2 rounded border border-border hover:bg-hoverbg transition-colors duration-200"
                     >
-                        <i className="fa-sharp fa-light fa-globe mr-2"></i>Website
+                        <i className="fa-sharp fa-light fa-globe mr-2"></i>官网
                     </a>
                     <a
                         href="https://github.com/wavetermdev/waveterm/blob/main/ACKNOWLEDGEMENTS.md"
@@ -57,7 +57,7 @@ const AboutModal = ({}: AboutModalProps) => {
                         rel="noopener"
                         className="inline-flex items-center px-4 py-2 rounded border border-border hover:bg-hoverbg transition-colors duration-200"
                     >
-                        <i className="fa-sharp fa-light fa-heart mr-2"></i>Acknowledgements
+                        <i className="fa-sharp fa-light fa-heart mr-2"></i>致谢
                     </a>
                 </div>
                 <div className="items-center gap-4 self-stretch w-full text-center">

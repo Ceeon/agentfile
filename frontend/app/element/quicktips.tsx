@@ -1,7 +1,6 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { MagnifyIcon } from "@/app/element/magnify";
 import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
 import { cn } from "@/util/util";
 
@@ -103,11 +102,11 @@ const QuickTips = () => {
                 <div className="grid grid-cols-1 @lg:grid-cols-2 gap-3">
                     <div className="flex items-center gap-3 p-2 rounded-md hover:bg-white/5 transition-colors">
                         <IconBox variant="secondary">
-                            <MagnifyIcon enabled={false} />
+                            <i className="fa-solid fa-pen-to-square fa-fw" />
                         </IconBox>
                         <div className="flex flex-col gap-0.5 flex-1">
-                            <span className="text-[15px]">Magnify a Block</span>
-                            <KeyBinding keyDecl="Cmd:m" />
+                            <span className="text-[15px]">Rename Current Tab</span>
+                            <KeyBinding keyDecl="Cmd:r" />
                         </div>
                     </div>
                     <div className="flex items-center gap-3 p-2 rounded-md hover:bg-white/5 transition-colors">
@@ -230,7 +229,7 @@ const QuickTips = () => {
                             <span className="text-accent-400 font-semibold">wsh view</span>
                             <span className="text-muted"> [filename|url]</span>
                         </code>
-                        <div className="text-secondary text-sm mt-1">Preview files, directories, or web URLs</div>
+                        <div className="text-secondary text-sm mt-1">打开文件、目录或网页地址</div>
                     </div>
                     <div className="flex flex-col gap-2 p-4 bg-black/20 rounded-lg border border-accent-400/30 hover:border-accent-400/50 transition-colors">
                         <code className="font-mono text-sm">
@@ -238,7 +237,7 @@ const QuickTips = () => {
                             <span className="text-accent-400 font-semibold">wsh edit</span>
                             <span className="text-muted"> [filename]</span>
                         </code>
-                        <div className="text-secondary text-sm mt-1">Edit config and code files</div>
+                        <div className="text-secondary text-sm mt-1">编辑配置文件和代码文件</div>
                     </div>
                 </div>
             </div>

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { fireAndForget } from "@/util/util";
-import { app, dialog, ipcMain, shell } from "electron";
+import { app, dialog, ipcMain, nativeImage, shell } from "electron";
 import envPaths from "env-paths";
 import { existsSync, mkdirSync } from "fs";
 import os from "os";
@@ -32,7 +32,8 @@ const waveDirName = `${waveDirNamePrefix}${waveDirNameSuffix ? `-${waveDirNameSu
 
 const paths = envPaths("waveterm2", { suffix: waveDirNameSuffix });
 
-app.setName(isDev ? "Wave (Dev)" : "Wave 2");
+app.setName("Agentfile");
+setAgentfileDockIcon();
 const unamePlatform = process.platform;
 const unameArch: string = process.arch;
 keyutil.setKeyUtilPlatform(unamePlatform);
@@ -46,9 +47,9 @@ export function checkIfRunningUnderARM64Translation(fullConfig: FullConfigType) 
         console.log("Running under ARM64 translation, alerting user");
         const dialogOpts: Electron.MessageBoxOptions = {
             type: "warning",
-            buttons: ["Dismiss", "Learn More"],
-            title: "Wave has detected a performance issue",
-            message: `Wave is running in ARM64 translation mode which may impact performance.\n\nRecommendation: Download the native ARM64 version from our website for optimal performance.`,
+            buttons: ["忽略", "了解更多"],
+            title: "Agentfile 检测到性能问题",
+            message: `Agentfile 正在通过 ARM64 转译模式运行，这可能影响性能。\n\n建议：前往官网下载安装原生 ARM64 版本，以获得最佳体验。`,
         };
 
         const choice = dialog.showMessageBoxSync(null, dialogOpts);
@@ -153,6 +154,28 @@ function getElectronAppBasePath(): string {
     return path.dirname(import.meta.dirname);
 }
 
+function getAgentfileIconPath(): string {
+    const candidates = [
+        path.join(getElectronAppBasePath(), "frontend/logos/agentfile-logo-dark.png"),
+        path.join(path.dirname(getElectronAppBasePath()), "public/logos/agentfile-logo-dark.png"),
+        path.join(getElectronAppBasePath(), "public/logos/agentfile-logo-dark.png"),
+    ];
+    return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
+
+function setAgentfileDockIcon(): void {
+    if (process.platform !== "darwin" || app.dock == null) {
+        return;
+    }
+    const iconPath = getAgentfileIconPath();
+    const icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) {
+        console.log(`failed to load Agentfile icon: ${iconPath}`);
+        return;
+    }
+    app.dock.setIcon(icon);
+}
+
 function getElectronAppUnpackedBasePath(): string {
     return getElectronAppBasePath().replace("app.asar", "app.asar.unpacked");
 }
@@ -192,9 +215,6 @@ ipcMain.on("get-user-name", (event) => {
 });
 ipcMain.on("get-host-name", (event) => {
     event.returnValue = os.hostname();
-});
-ipcMain.on("get-webview-preload", (event) => {
-    event.returnValue = path.join(getElectronAppBasePath(), "preload", "preload-webview.cjs");
 });
 ipcMain.on("get-data-dir", (event) => {
     event.returnValue = getWaveDataDir();
@@ -269,6 +289,7 @@ async function callWithOriginalXdgCurrentDesktopAsync(callback: () => Promise<vo
 export {
     callWithOriginalXdgCurrentDesktop,
     callWithOriginalXdgCurrentDesktopAsync,
+    getAgentfileIconPath,
     getElectronAppBasePath,
     getElectronAppResourcesPath,
     getElectronAppUnpackedBasePath,
@@ -279,6 +300,7 @@ export {
     getXdgCurrentDesktop,
     isDev,
     isDevVite,
+    setAgentfileDockIcon,
     unameArch,
     unamePlatform,
     WaveConfigHomeVarName,

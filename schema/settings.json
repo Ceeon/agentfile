@@ -17,6 +17,9 @@
         "app:defaultnewblock": {
           "type": "string"
         },
+        "app:externalterminal": {
+          "type": "string"
+        },
         "app:showoverlayblocknums": {
           "type": "boolean"
         },
@@ -181,6 +184,10 @@
         },
         "preview:showhiddenfiles": {
           "type": "boolean"
+        },
+        "preview:bookmarks": {
+          "items": true,
+          "type": "array"
         },
         "tab:preset": {
           "type": "string"

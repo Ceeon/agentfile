@@ -46,9 +46,9 @@ export function getLastModifiedTime(unixMillis: number, column: Column<FileInfo,
 
     let datePortion: string;
     if (nowDatetime.isSame(fileDatetime, "date")) {
-        datePortion = "Today";
+        datePortion = "今天";
     } else if (nowDatetime.subtract(1, "day").isSame(fileDatetime, "date")) {
-        datePortion = "Yesterday";
+        datePortion = "昨天";
     } else {
         datePortion = dayjs(fileDatetime).format("M/D/YY");
     }
@@ -105,7 +105,7 @@ export function handleRename(
             const errorText = `${e}`;
             console.warn(`Rename failed: ${errorText}`);
             const errorMsg: ErrorMsg = {
-                status: "Rename Failed",
+                status: "重命名失败",
                 text: `${e}`,
             };
             setErrorMsg(errorMsg);
@@ -133,19 +133,19 @@ export function handleFileDelete(
             let errorMsg: ErrorMsg;
             if (errorText.includes(recursiveError) && !recursive) {
                 errorMsg = {
-                    status: "Confirm Delete Directory",
-                    text: "Deleting a directory requires the recursive flag. Proceed?",
+                    status: "确认删除文件夹",
+                    text: "删除文件夹需要递归删除。确定继续吗？",
                     level: "warning",
                     buttons: [
                         {
-                            text: "Delete Recursively",
+                            text: "递归删除",
                             onClick: () => handleFileDelete(model, path, true, setErrorMsg),
                         },
                     ],
                 };
             } else {
                 errorMsg = {
-                    status: "Delete Failed",
+                    status: "删除失败",
                     text: `${e}`,
                 };
             }

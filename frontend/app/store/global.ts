@@ -11,9 +11,11 @@ import {
 } from "@/layout/index";
 import {
     LayoutTreeReplaceNodeAction,
+    LayoutTreeInsertNodeAtIndexAction,
     LayoutTreeSplitHorizontalAction,
     LayoutTreeSplitVerticalAction,
 } from "@/layout/lib/types";
+import { FlexDirection } from "@/layout/lib/types";
 import { getWebServerEndpoint } from "@/util/endpoints";
 import { fetch } from "@/util/fetchutil";
 import { setPlatform } from "@/util/platformutil";
@@ -42,6 +44,88 @@ const ConnStatusMapAtom = atom(new Map<string, PrimitiveAtom<ConnStatus>>());
 const TabIndicatorMap = new Map<string, PrimitiveAtom<TabIndicator>>();
 const orefAtomCache = new Map<string, Map<string, Atom<any>>>();
 
+const noop = () => {};
+const noopUnsubscribe = () => {};
+
+function getFallbackPlatform(): NodeJS.Platform {
+    if (typeof navigator === "undefined") {
+        return "darwin";
+    }
+    const userAgentData = navigator as Navigator & { userAgentData?: { platform?: string } };
+    const platform = userAgentData.userAgentData?.platform ?? navigator.platform ?? "";
+    if (/win/i.test(platform)) {
+        return "win32";
+    }
+    if (/linux/i.test(platform)) {
+        return "linux";
+    }
+    return "darwin";
+}
+
+const fallbackApi: ElectronApi = {
+    getAuthKey: () => "",
+    getIsDev: () => true,
+    getCursorPoint: () => ({ x: 0, y: 0 }),
+    getPlatform: () => getFallbackPlatform(),
+    getEnv: () => "",
+    getUserName: () => "",
+    getHostName: () => "",
+    getDataDir: () => "",
+    getConfigDir: () => "",
+    getHomeDir: () => "~",
+    getAboutModalDetails: () => ({} as AboutModalDetails),
+    getZoomFactor: () => 1,
+    openNewWindow: noop,
+    openFileInNewTab: noop,
+    registerGlobalWebviewKeys: noop,
+    showWorkspaceAppMenu: noop,
+    showContextMenu: noop,
+    onContextMenuClick: noop,
+    onNavigate: noop,
+    onIframeNavigate: noop,
+    downloadFile: noop,
+    openExternal: noop,
+    onFullScreenChange: noop,
+    onZoomFactorChange: noop,
+    onUpdaterStatusChange: noop,
+    getUpdaterStatus: () => "up-to-date",
+    getUpdaterChannel: () => "",
+    installAppUpdate: noop,
+    onMenuItemAbout: noop,
+    onMenuItemSettings: noop,
+    onMenuItemNewFolderWindow: noop,
+    updateWindowControlsOverlay: noop,
+    onReinjectKey: noop,
+    onControlShiftStateUpdate: noop,
+    createWorkspace: noop,
+    switchWorkspace: noop,
+    deleteWorkspace: noop,
+    setActiveTab: noop,
+    createTab: noop,
+    closeTab: noop,
+    setWindowInitStatus: noop,
+    onWaveInit: () => noopUnsubscribe,
+    onOpenFileInCurrentWindow: () => noopUnsubscribe,
+    sendLog: noop,
+    onQuicklook: noop,
+    openNativePath: noop,
+    openExternalTerminal: noop,
+    openDirectoryTarget: noop,
+    listDirectoryOpenTargets: async () => ["terminal"],
+    listExternalTerminalApps: async () => [{ value: "terminal", label: "Terminal.app", available: true, supported: true }],
+    openFileInBrowser: noop,
+    showItemInFolder: noop,
+    writeClipboardText: async () => {},
+    writeClipboardHtml: async () => {},
+    readClipboardFiles: async () => [],
+    readClipboardImage: async () => null,
+    captureScreenshot: async () => "",
+    setKeyboardChordMode: noop,
+    incrementTermCommands: noop,
+    nativePaste: noop,
+    doRefresh: noop,
+};
+
 function initGlobal(initOpts: GlobalInitOptions) {
     globalEnvironment = initOpts.environment;
     globalPrimaryTabStartup = initOpts.primaryTabStartup ?? false;
@@ -51,12 +135,6 @@ function initGlobal(initOpts: GlobalInitOptions) {
 
 function initGlobalAtoms(initOpts: GlobalInitOptions) {
     const windowIdAtom = atom(initOpts.windowId) as PrimitiveAtom<string>;
-    const builderIdAtom = atom(initOpts.builderId) as PrimitiveAtom<string>;
-    const builderAppIdAtom = atom<string>(null) as PrimitiveAtom<string>;
-    const waveWindowTypeAtom = atom((get) => {
-        const builderId = get(builderIdAtom);
-        return builderId != null ? "builder" : "tab";
-    }) as Atom<"tab" | "builder">;
     const uiContextAtom = atom((get) => {
         const uiContext: UIContext = {
             windowid: initOpts.windowId,
@@ -90,6 +168,22 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
         });
     } catch (e) {
         console.log("failed to initialize onMenuItemAbout handler", e);
+    }
+
+    try {
+        getApi().onMenuItemSettings(() => {
+            modalsModel.pushModal("AppSettingsModal");
+        });
+    } catch (e) {
+        console.log("failed to initialize onMenuItemSettings handler", e);
+    }
+
+    try {
+        getApi().onMenuItemNewFolderWindow(() => {
+            fireAndForget(createDefaultPreviewBlock);
+        });
+    } catch (e) {
+        console.log("failed to initialize onMenuItemNewFolderWindow handler", e);
     }
 
     const workspaceAtom: Atom<Workspace> = atom((get) => {
@@ -172,9 +266,6 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
     const rateLimitInfoAtom = atom(null) as PrimitiveAtom<RateLimitInfo>;
     atoms = {
         // initialized in wave.ts (will not be null inside of application)
-        builderId: builderIdAtom,
-        builderAppId: builderAppIdAtom,
-        waveWindowType: waveWindowTypeAtom,
         uiContext: uiContextAtom,
         workspace: workspaceAtom,
         fullConfigAtom,
@@ -503,7 +594,7 @@ function readAtom<T>(atom: Atom<T>): T {
  * Get the preload api.
  */
 function getApi(): ElectronApi {
-    return (window as any).api;
+    return { ...fallbackApi, ...((window as any).api ?? {}) };
 }
 
 async function createBlockSplitHorizontally(
@@ -523,6 +614,49 @@ async function createBlockSplitHorizontally(
         targetNodeId: targetNodeId,
         newNode: newLayoutNode(undefined, undefined, undefined, { blockId: newBlockId }),
         position: position,
+        focused: true,
+    };
+    layoutModel.treeReducer(splitAction);
+    return newBlockId;
+}
+
+async function createBlockAtRightmost(
+    blockDef: BlockDef
+): Promise<string> {
+    const layoutModel = getLayoutModelForStaticTab();
+    const rtOpts: RuntimeOpts = { termsize: { rows: 25, cols: 80 } };
+    const newBlockId = await ObjectService.CreateBlock(blockDef, rtOpts);
+    const newNode = newLayoutNode(undefined, undefined, undefined, { blockId: newBlockId });
+    const rootNode = layoutModel.treeState.rootNode;
+
+    if (rootNode == null) {
+        const insertNodeAction: LayoutTreeInsertNodeAction = {
+            type: LayoutTreeActionType.InsertNode,
+            node: newNode,
+            magnified: false,
+            focused: true,
+        };
+        layoutModel.treeReducer(insertNodeAction);
+        return newBlockId;
+    }
+
+    if (rootNode.flexDirection === FlexDirection.Row && rootNode.children?.length > 0) {
+        const insertAction: LayoutTreeInsertNodeAtIndexAction = {
+            type: LayoutTreeActionType.InsertNodeAtIndex,
+            indexArr: [rootNode.children.length - 1],
+            node: newNode,
+            magnified: false,
+            focused: true,
+        };
+        layoutModel.treeReducer(insertAction);
+        return newBlockId;
+    }
+
+    const splitAction: LayoutTreeSplitHorizontalAction = {
+        type: LayoutTreeActionType.SplitHorizontal,
+        targetNodeId: rootNode.id,
+        newNode,
+        position: "after",
         focused: true,
     };
     layoutModel.treeReducer(splitAction);
@@ -568,6 +702,19 @@ async function createBlock(blockDef: BlockDef, magnified = false, ephemeral = fa
     };
     layoutModel.treeReducer(insertNodeAction);
     return blockId;
+}
+
+function getDefaultPreviewBlockDef(): BlockDef {
+    return {
+        meta: {
+            view: "preview",
+            file: "~",
+        },
+    };
+}
+
+async function createDefaultPreviewBlock(): Promise<string> {
+    return createBlock(getDefaultPreviewBlockDef());
 }
 
 async function replaceBlock(blockId: string, blockDef: BlockDef, focus: boolean): Promise<string> {
@@ -676,22 +823,11 @@ function getLocalHostDisplayNameAtom(): Atom<string> {
 }
 
 /**
- * Open a link in a new window, or in a new web widget. The user can set all links to open in a new web widget using the `web:openlinksinternally` setting.
+ * Open a link externally.
  * @param uri The link to open.
- * @param forceOpenInternally Force the link to open in a new web widget.
  */
-async function openLink(uri: string, forceOpenInternally = false) {
-    if (forceOpenInternally || globalStore.get(atoms.settingsAtom)?.["web:openlinksinternally"]) {
-        const blockDef: BlockDef = {
-            meta: {
-                view: "web",
-                url: uri,
-            },
-        };
-        await createBlock(blockDef);
-    } else {
-        getApi().openExternal(uri);
-    }
+async function openLink(uri: string, _forceOpenInternally = false) {
+    getApi().openExternal(uri);
 }
 
 function registerBlockComponentModel(blockId: string, bcm: BlockComponentModel) {
@@ -969,6 +1105,8 @@ export {
     countersClear,
     countersPrint,
     createBlock,
+    createBlockAtRightmost,
+    createDefaultPreviewBlock,
     createBlockSplitHorizontally,
     createBlockSplitVertically,
     createTab,

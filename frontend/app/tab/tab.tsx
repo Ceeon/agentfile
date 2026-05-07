@@ -23,6 +23,8 @@ import { ObjectService } from "../store/services";
 import { makeORef, useWaveObjectValue } from "../store/wos";
 import "./tab.scss";
 
+const RenameCurrentTabEvent = "wave:rename-current-tab";
+
 interface TabProps {
     id: string;
     active: boolean;
@@ -81,15 +83,23 @@ const Tab = memo(
                 selection.addRange(range);
             }, []);
 
-            const handleRenameTab: React.MouseEventHandler<HTMLDivElement> = (event) => {
-                event?.stopPropagation();
+            const startRenameTab = useCallback(() => {
                 setIsEditable(true);
                 editableTimeoutRef.current = setTimeout(() => {
                     selectEditableText();
                 }, 50);
+            }, [selectEditableText]);
+
+            const handleRenameTab: React.MouseEventHandler<HTMLDivElement> = (event) => {
+                event?.stopPropagation();
+                startRenameTab();
             };
 
             const handleBlur = () => {
+                if (!editableRef.current) {
+                    setIsEditable(false);
+                    return;
+                }
                 let newText = editableRef.current.innerText.trim();
                 newText = newText || originalName;
                 editableRef.current.innerText = newText;
@@ -139,6 +149,20 @@ const Tab = memo(
                 }
             }, [isNew, tabWidth]);
 
+            useEffect(() => {
+                const handleRenameRequest = (event: Event) => {
+                    const customEvent = event as CustomEvent<{ tabId?: string }>;
+                    if (customEvent.detail?.tabId !== id) {
+                        return;
+                    }
+                    startRenameTab();
+                };
+                window.addEventListener(RenameCurrentTabEvent, handleRenameRequest);
+                return () => {
+                    window.removeEventListener(RenameCurrentTabEvent, handleRenameRequest);
+                };
+            }, [id, startRenameTab]);
+
             // Prevent drag from being triggered on mousedown
             const handleMouseDownOnClose = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
                 event.stopPropagation();
@@ -160,20 +184,20 @@ const Tab = memo(
                     if (currentIndicator) {
                         menu.push(
                             {
-                                label: "Clear Tab Indicator",
+                                label: "清除标签提示",
                                 click: () => setTabIndicator(id, null),
                             },
                             {
-                                label: "Clear All Indicators",
+                                label: "清除全部提示",
                                 click: () => clearAllTabIndicators(),
                             },
                             { type: "separator" }
                         );
                     }
                     menu.push(
-                        { label: "Rename Tab", click: () => handleRenameTab(null) },
+                        { label: "重命名标签页", click: () => handleRenameTab(null) },
                         {
-                            label: "Copy TabId",
+                            label: "复制标签页 ID",
                             click: () => fireAndForget(() => navigator.clipboard.writeText(id)),
                         },
                         { type: "separator" }
@@ -208,9 +232,9 @@ const Tab = memo(
                                     }),
                             });
                         }
-                        menu.push({ label: "Backgrounds", type: "submenu", submenu }, { type: "separator" });
+                        menu.push({ label: "背景", type: "submenu", submenu }, { type: "separator" });
                     }
-                    menu.push({ label: "Close Tab", click: () => onClose(null) });
+                    menu.push({ label: "关闭标签页", click: () => onClose(null) });
                     ContextMenuModel.showContextMenu(menu, e);
                 },
                 [handleRenameTab, id, onClose]
@@ -246,7 +270,7 @@ const Tab = memo(
                             <div
                                 className="tab-indicator pointer-events-none"
                                 style={{ color: indicator.color || "#fbbf24" }}
-                                title="Activity notification"
+                                title="活动提醒"
                             >
                                 <i className={makeIconClass(indicator.icon, true, { defaultIcon: "bell" })} />
                             </div>
@@ -255,7 +279,7 @@ const Tab = memo(
                             className="ghost grey close"
                             onClick={onClose}
                             onMouseDown={handleMouseDownOnClose}
-                            title="Close Tab"
+                            title="关闭标签页"
                         >
                             <i className="fa fa-solid fa-xmark" />
                         </Button>

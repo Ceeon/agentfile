@@ -42,7 +42,7 @@ export const ErrorOverlay = memo(({ errorMsg, resetOverlay }: { errorMsg: ErrorM
                             <CopyButton
                                 className="invisible group-hover:visible flex absolute top-0 right-1 rounded backdrop-blur-lg p-1 items-center justify-end gap-1"
                                 onClick={handleCopyToClipboard}
-                                title="Copy"
+                                title="复制"
                             />
                             <div>{errorMsg.text}</div>
                         </OverlayScrollbarsComponent>

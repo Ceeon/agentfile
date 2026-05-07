@@ -19,7 +19,7 @@ const UserInputModal = (userInputRequest: UserInputRequest) => {
             UserInputService.SendUserInputResponse({
                 type: "userinputresp",
                 requestid: userInputRequest.requestid,
-                errormsg: "Canceled by the user",
+                errormsg: "用户已取消",
             })
         );
         modalsModel.popModal();

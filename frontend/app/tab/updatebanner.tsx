@@ -13,16 +13,16 @@ const UpdateStatusBannerComponent = forwardRef<HTMLButtonElement>((_, ref) => {
         let dismissBanner = false;
         switch (appUpdateStatus) {
             case "ready":
-                message = "Update Available";
+                message = "可用更新已就绪";
                 break;
             case "downloading":
-                message = "Downloading Update";
+                message = "正在下载更新";
                 break;
             case "installing":
-                message = "Installing Update";
+                message = "正在安装更新";
                 break;
             case "error":
-                message = "Updater Error: Try Checking Again";
+                message = "更新出错，请重试";
                 dismissBanner = true;
                 break;
             default:
@@ -55,7 +55,7 @@ const UpdateStatusBannerComponent = forwardRef<HTMLButtonElement>((_, ref) => {
         return (
             <Button
                 className="text-black bg-[var(--accent-color)] flex-[0_0_fit-content] !h-full !px-3 disabled:!opacity-[unset]"
-                title={appUpdateStatus === "ready" ? "Click to Install Update" : updateStatusMessage}
+                title={appUpdateStatus === "ready" ? "点击安装更新" : updateStatusMessage}
                 onClick={onClick}
                 disabled={appUpdateStatus !== "ready"}
                 ref={ref}

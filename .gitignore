@@ -17,8 +17,10 @@ make/
 artifacts/
 mikework/
 manifests/
+archive/
 .env
 out
+.claude/settings.local.json
 
 # Yarn Modern
 .pnp.*

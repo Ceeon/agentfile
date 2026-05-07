@@ -38,10 +38,10 @@ export const ConnectionButton = React.memo(
             if (isLocal) {
                 color = "var(--color-secondary)";
                 if (connection === "local:gitbash") {
-                    titleText = "Connected to Git Bash";
+                    titleText = "已连接到 Git Bash";
                     connDisplayName = "Git Bash";
                 } else {
-                    titleText = "Connected to Local Machine";
+                    titleText = "已连接到本机";
                     if (localName) {
                         titleText += ` (${localName})`;
                     }
@@ -57,12 +57,12 @@ export const ConnectionButton = React.memo(
                     />
                 );
             } else {
-                titleText = "Connected to " + connection;
+                titleText = "已连接到 " + connection;
                 let iconName = "arrow-right-arrow-left";
                 let iconSvg = null;
                 if (connStatus?.status == "connecting") {
                     color = "var(--warning-color)";
-                    titleText = "Connecting to " + connection;
+                    titleText = "正在连接到 " + connection;
                     shouldSpin = false;
                     iconSvg = (
                         <div className="relative top-[5px] left-[9px] [&_svg]:fill-warning">
@@ -71,14 +71,14 @@ export const ConnectionButton = React.memo(
                     );
                 } else if (connStatus?.status == "error") {
                     color = "var(--error-color)";
-                    titleText = "Error connecting to " + connection;
+                    titleText = "连接 " + connection + " 时出错";
                     if (connStatus?.error != null) {
                         titleText += " (" + connStatus.error + ")";
                     }
                     showDisconnectedSlash = true;
                 } else if (!connStatus?.connected) {
                     color = "var(--grey-text-color)";
-                    titleText = "Disconnected from " + connection;
+                    titleText = "已断开与 " + connection + " 的连接";
                     showDisconnectedSlash = true;
                 }
                 if (iconSvg != null) {

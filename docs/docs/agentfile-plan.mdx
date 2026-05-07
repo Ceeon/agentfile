@@ -1,0 +1,40 @@
+---
+title: Agentfile 轻量工作台设计
+---
+
+## 目标
+
+在现有 Wave/Agentfile 代码基中，抽出一个最小的、以 Markdown 为核心的文件工作台体验。核心能力保持三项：
+
+1. **文件/标签切换**：继续使用现有的 tab/block 框架（`frontend/app/workspace` + `frontend/app/block`）来承载文件导航。
+2. **即时 Markdown 展示**：每个 tab/块同时渲染 Markdown 内容，实时预览，去掉多余的视图（终端、webview、AI、系统信息等）。
+3. **多窗口/多窗口模式**：保留 Wave 里 multi-tab、tabbar、workspace 的能力，让用户可以打开多个 Agentfile 窗口，每个窗口都是独立 Markdown 工作区。
+
+辅助目标是保持 Agentfile 作为远程文件工作台的定位：本地/远程文件浏览为主，嵌入式终端或 Webview 不再内置，但可以“通过外部终端”快速 attach 已连接的 SSH/ghostty/tmux 会话。
+
+## 当前可复用模块
+
+- `frontend/app/workspace/workspace.tsx`：提供 tabBar + TabContent 渲染，依赖 `atoms.workspace`、`atoms.staticTabId`。可直接复用作 Agentfile 的 UI 容器。
+- `frontend/app/block/{block,blockframe,blocktypes,blockutil}`：实际渲染单个 block/视图，目前已支持 Preview、配置等视图。我们只需为 Markdown 显示提供一个更小的 viewModel。
+- `frontend/wave.ts`：Wave 启动流程（GlobalModel 初始化、WOS 加载、tab/workspace pinning 等），可以沿用启动/资源加载逻辑，但从配置层剥离掉终端、AI、web 的注册。
+- `frontend/app/view/preview/preview-markdown.tsx` 等：已有 Markdown preview 组件可直接嵌入。
+
+## 方案概览
+
+1. **命名空间 & 文件夹**：新增顶级 `agentfile/` 目录（或在 `frontend/app` 下创建 `agentfile` 子包）来承载新的、精简的 entry point、布局和配置。保留现有 `wave.ts` 作为参考，但 Agentfile 需要一个只渲染 Markdown/文件的版本（可命名为 `agentfile.tsx`/`agentfile-entry.ts`）。
+2. **极简布局**：去除在 workspace 中与终端、AI 相关的菜单、命令等；tab content 里只处理 Markdown 预览 + 文件树 metadata（可复用 `block` UI）。如果需要完整 file manager，可在每个 tab 里加入文件树/toolbar combo。
+3. **Remote shell integration**：在 UI 里添加 “打开外部终端” 控件（Hook 到 `RpcApi`/`TabRpcClient` 的 ssh 代理），但关键是只负责触发外部 ghostty/tmux，terminal 窗口由系统/外部应用承载。保持上下文连续（`attach` 到当前 tab/文件的 remote session）。
+4. **多窗口**：Wave 目前支持 workspace/tabs；确保 Agentfile 入口（main renderer + Go backend）只初始化一个 workspace，但用户可以通过 menu/shortcut 新开额外窗口，每个窗口使用相同的 Agentfile stack。
+
+## 任务列表
+
+- [x] 初步调研：阅读 `frontend/app/workspace`、`frontend/app/block`、`frontend/wave.ts`，了解现有框架和可复用的控件（当前进展）。
+- [ ] 建立 Agentfile 目录：在 doc/项目中确定新的轻量目录结构（`agentfile/entry.tsx`、简版 `workspace`、`markdown-view`）。
+- [ ] 精简 UI：删掉终端/webview/AI 相关的 block 视图，确保只有 Markdown/文件视图；
+- [ ] 多窗口支持：保持 tab/窗口状态原子（`atoms.workspace`），但限制为单一工作台 view；
+- [ ] Remote shell 挂钩：定义 “打开外部终端” API，确保可以 attach 到远端 tmux session，并明确该功能不再在内部终端里呈现；
+- [ ] 方案验证：整理文档（如当前文件）、草拟 MVP 工作流稿，包括必要的 Go/后端变更（配置、process 关系）。
+
+## 后续
+
+完成上述任务后，可以再拆分更细的工程任务（Go/JS 架构、UI/UX、远端 shell 流程）。如果有现成更轻量的开源项目参考（例如 `ghostty`/`tmux` 组合 UI），可附到 docs 作为对标。现在的重点是先把 "Agentfile = 文件工作台 + Markdown 预览" 的设想固定在文档中，以便后续开发。

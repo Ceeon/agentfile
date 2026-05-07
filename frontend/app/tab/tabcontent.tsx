@@ -50,9 +50,9 @@ const TabContent = React.memo(({ tabId }: { tabId: string }) => {
     let innerContent;
 
     if (tabLoading) {
-        innerContent = <CenteredDiv>Tab Loading</CenteredDiv>;
+        innerContent = <CenteredDiv>标签页加载中</CenteredDiv>;
     } else if (!tabData) {
-        innerContent = <CenteredDiv>Tab Not Found</CenteredDiv>;
+        innerContent = <CenteredDiv>未找到标签页</CenteredDiv>;
     } else if (tabData?.blockids?.length == 0) {
         innerContent = null;
     } else {

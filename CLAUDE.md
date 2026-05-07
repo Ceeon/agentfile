@@ -37,7 +37,12 @@ task package
 task init
 ```
 
-**Important**: `task package` runs `clean` first which deletes `dist/`. If packaging fails to include wavesrv, run `task build:server` before `task package`.
+**Important**: `task package` 会先执行 `clean` 删除 `dist/`，导致之前构建的 wavesrv 被清除。由于 task 的缓存机制，`build:server` 可能被判定为 "up to date" 而跳过重建。正确做法：
+```bash
+# 先手动清理，强制 task 重新构建
+rm -rf dist make && task build:server && task package
+```
+**不要** 分开运行 `task build:server && task package`，因为 package 内部的 clean 会删掉刚构建好的二进制文件。
 
 ## Testing
 
@@ -110,6 +115,17 @@ waveEventSubscribe({
 });
 ```
 
+#### Directory Preview Refresh Model
+
+- Local directory previews subscribe to backend `dirwatch` events. Remote directories do not have local `fsnotify`, so the frontend polls them every 2 seconds as a fallback.
+- Backend directory watches are recursive and reference-counted per block. This matters when the same block opens both a parent directory and an expanded child directory: unsubscribing the child must not tear down the parent's recursive watch.
+- Frontend auto-refresh is intentionally selective. `CREATE` / `REMOVE` / `RENAME` always refresh, but write-only events are ignored while sorting by `name` or `type` to avoid constant redraws during builds, logs, or repeated file writes.
+- Expanded subdirectories refresh independently. Automatic updates should reload only the affected directory instead of re-reading the full expanded tree.
+- Main implementation points:
+  - `pkg/service/dirwatch/dirwatch.go`
+  - `frontend/app/view/preview/preview-directory.tsx`
+  - `frontend/util/directorywatchutil.ts`
+
 ## Code Patterns
 
 ### Adding RPC Commands
@@ -148,6 +164,22 @@ WCLOUD_ENDPOINT="https://api.waveterm.dev/central" WCLOUD_WS_ENDPOINT="wss://wsa
 1. 使用 `task dev` 启动开发版本（使用 waveterm2-dev 数据目录）
 2. 开发版和正式版可以同时运行，互不影响
 3. 只有用户明确要求更新正式版时，才执行 `task package` 并安装
+
+## Data Persistence Patterns
+
+Block 元数据 (`block.meta`) 随 block 生命周期存在——tab 关闭时 block 被删除，数据丢失。需要跨 tab/session 持久化的数据应存入 settings：
+
+- **读取**: `globalStore.get(getSettingsKeyAtom("preview:bookmarks"))`
+- **写入**: `RpcApi.SetConfigCommand(TabRpcClient, { "preview:bookmarks": value })`
+- **Go 类型**: 在 `pkg/wconfig/settingsconfig.go` 的 `SettingsType` 中添加字段
+- **生成 TS 类型**: `task generate`
+
+添加新 settings 字段流程：
+1. `pkg/wconfig/settingsconfig.go` → `SettingsType` 加字段（如 `PreviewBookmarks []any`）
+2. `task generate` → 自动更新 `frontend/types/gotypes.d.ts`
+3. 前端通过 `SetConfigCommand` 写入，数据保存到 `~/.config/waveterm2/settings.json`
+
+注意：`SetBaseConfigValue` 会对 config key 做类型检查（`getConfigKeyType`），必须在 `SettingsType` 中声明字段后才能写入。复杂类型（数组/对象）用 `[]any` 避免 JSON 反序列化类型不匹配。
 
 ## User Preferences
 

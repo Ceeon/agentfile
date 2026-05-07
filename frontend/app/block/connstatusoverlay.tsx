@@ -75,10 +75,10 @@ export const ConnStatusOverlay = React.memo(
             }
         }, [connName]);
 
-        let statusText = `Disconnected from "${connName}"`;
+        let statusText = `已断开与 "${connName}" 的连接`;
         let showReconnect = true;
         if (connStatus.status == "connecting") {
-            statusText = `Connecting to "${connName}"...`;
+            statusText = `正在连接到 "${connName}"...`;
             showReconnect = false;
         }
         if (connStatus.status == "connected") {
@@ -90,7 +90,7 @@ export const ConnStatusOverlay = React.memo(
             reconDisplay = <i className="fa-sharp fa-solid fa-rotate-right"></i>;
             reconClassName = clsx(reconClassName, "text-[12px] py-[5px] px-[6px]");
         } else {
-            reconDisplay = "Reconnect";
+            reconDisplay = "重新连接";
             reconClassName = clsx(reconClassName, "text-[11px] py-[3px] px-[7px]");
         }
         const showIcon = connStatus.status != "connecting";
@@ -110,10 +110,10 @@ export const ConnStatusOverlay = React.memo(
             async (e: React.MouseEvent) => {
                 const errTexts = [];
                 if (showError) {
-                    errTexts.push(`error: ${connStatus.error}`);
+                    errTexts.push(`错误：${connStatus.error}`);
                 }
                 if (showWshError) {
-                    errTexts.push(`unable to use wsh: ${connStatus.wsherror}`);
+                    errTexts.push(`无法使用 wsh：${connStatus.wsherror}`);
                 }
                 const textToCopy = errTexts.join("\n");
                 await navigator.clipboard.writeText(textToCopy);
@@ -137,14 +137,14 @@ export const ConnStatusOverlay = React.memo(
                                     className="connstatus-error"
                                     options={{ scrollbars: { autoHide: "leave" } }}
                                 >
-                                    <CopyButton className="copy-button" onClick={handleCopy} title="Copy" />
-                                    {showError ? <div>error: {connStatus.error}</div> : null}
-                                    {showWshError ? <div>unable to use wsh: {connStatus.wsherror}</div> : null}
+                                    <CopyButton className="copy-button" onClick={handleCopy} title="复制" />
+                                    {showError ? <div>错误：{connStatus.error}</div> : null}
+                                    {showWshError ? <div>无法使用 wsh：{connStatus.wsherror}</div> : null}
                                 </OverlayScrollbarsComponent>
                             )}
                             {showWshError && (
                                 <Button className={reconClassName} onClick={handleDisableWsh}>
-                                    always disable wsh
+                                    始终禁用 wsh
                                 </Button>
                             )}
                         </div>

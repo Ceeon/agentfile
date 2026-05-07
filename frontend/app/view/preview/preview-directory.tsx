@@ -4,7 +4,7 @@
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import {
     atoms,
-    createBlock,
+    createBlockAtRightmost,
     getApi,
     globalStore,
 } from "@/app/store/global";
@@ -13,12 +13,27 @@ import { waveEventSubscribe } from "@/app/store/wps";
 import * as WOS from "@/app/store/wos";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { checkKeyPressed, isCharacterKeyEvent } from "@/util/keyutil";
-import { PLATFORM, PlatformMacOS } from "@/util/platformutil";
-import { addOpenMenuItems } from "@/util/previewutil";
-import { fireAndForget } from "@/util/util";
+import {
+    buildDirectoryBackgroundMenuEntries,
+    buildDirectoryItemMenuEntries,
+    resolveDirectoryContextSelection,
+    type DirectoryContextMenuActionId,
+    type DirectoryContextMenuEntry,
+} from "@/util/directorycontextmenu";
+import { extractAllClipboardData, MIME_TO_EXT } from "@/util/clipboardutil";
+import { checkKeyPressed } from "@/util/keyutil";
+import {
+    isInternalDirectoryProbeName,
+    normalizeDirectoryWatchPath,
+    shouldIgnoreVolumesDirectoryWatchEvent,
+    shouldSkipAutoDirectoryRead,
+    shouldRefreshDirectoryForEvent,
+} from "@/util/directorywatchutil";
+import { getOpenMenuActionHandler, normalizeMenuSeparators, type OpenMenuActionId } from "@/util/previewutil";
+import { fireAndForget, isLocalConnName, makeConnRoute } from "@/util/util";
 import { formatRemoteUri } from "@/util/waveutil";
 import { offset, useDismiss, useFloating, useInteractions } from "@floating-ui/react";
+import base64 from "base64-js";
 import clsx from "clsx";
 import { PrimitiveAtom, atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { OverlayScrollbarsComponent, OverlayScrollbarsComponentRef } from "overlayscrollbars-react";
@@ -27,7 +42,7 @@ import { useDrag, useDrop } from "react-dnd";
 import { NativeTypes } from "react-dnd-html5-backend";
 import { quote as shellQuote } from "shell-quote";
 import "./directorypreview.scss";
-import { EntryManagerOverlay, EntryManagerOverlayProps, EntryManagerType } from "./entry-manager";
+import { EntryManagerOverlay, EntryManagerOverlayProps } from "./entry-manager";
 import {
     handleFileDelete,
     handleRename,
@@ -39,6 +54,8 @@ import { type PreviewModel } from "./preview-model";
 
 const PageJumpSize = 20;
 const VirtualRowHeight = 24;
+const AutoRefreshCoalesceMs = 250;
+const DirectoryReconcileFallbackIntervalMs = 2000;
 
 type SortMode = "name" | "type" | "size" | "modified";
 type SortDirection = "asc" | "desc";
@@ -61,6 +78,40 @@ const DefaultPreviewPrefs: Required<PreviewPrefs> = {
     showIcons: true,
 };
 const PreviewPrefsMetaKey = "preview:dirprefs";
+const DirectoryTreeStateMetaKey = "preview:dirtreestate";
+
+type DirectoryTreeState = {
+    rootPath?: string;
+    expandedPaths?: string[];
+};
+
+function normalizeStoredExpandedPaths(state: DirectoryTreeState | null | undefined, dirPath: string): Set<string> {
+    if (!dirPath || state?.rootPath !== dirPath || !Array.isArray(state?.expandedPaths)) {
+        return new Set();
+    }
+    const dirPrefix = dirPath === "/" ? "/" : `${dirPath}/`;
+    const normalizedPaths = state.expandedPaths.filter(
+        (path): path is string =>
+            typeof path === "string" &&
+            path.length > 0 &&
+            path !== dirPath &&
+            path.startsWith(dirPrefix) &&
+            !shouldSkipAutoDirectoryRead(path, dirPath)
+    );
+    return new Set(normalizedPaths);
+}
+
+function stringSetsEqual(a: Set<string>, b: Set<string>): boolean {
+    if (a.size !== b.size) {
+        return false;
+    }
+    for (const value of a) {
+        if (!b.has(value)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // Internal clipboard for copy/cut operations
 interface FileClipboard {
@@ -68,6 +119,58 @@ interface FileClipboard {
     names: string[];
     isDirs: boolean[];
     operation: "copy" | "cut";
+}
+
+const DirectoryMenuLocale = "zh-CN" as const;
+
+function makeClipboardImageName(blob: Blob, index: number) {
+    const ext = MIME_TO_EXT[blob.type] ?? "png";
+    return `clipboard-image-${Date.now()}-${index + 1}.${ext}`;
+}
+
+function normalizeClipboardFsPath(srcPath: string) {
+    if (!srcPath) {
+        return srcPath;
+    }
+    const normalized = srcPath.replace(/\/+$/, "");
+    return normalized.length > 0 ? normalized : "/";
+}
+
+function filterInternalProbeEntries(entries: FileInfo[]): FileInfo[] {
+    return entries.filter((entry) => !isInternalDirectoryProbeName(entry.name));
+}
+
+function makeDirectoryEntriesSignature(entries: FileInfo[] | null | undefined): string {
+    if (!entries || entries.length === 0) {
+        return "";
+    }
+    return JSON.stringify(
+        entries
+            .map((entry) => ({
+                path: entry.path ?? "",
+                name: entry.name ?? "",
+                isdir: !!entry.isdir,
+                size: entry.size ?? null,
+                modtime: entry.modtime ?? null,
+                mimetype: entry.mimetype ?? "",
+            }))
+            .sort((a, b) => a.path.localeCompare(b.path) || a.name.localeCompare(b.name))
+    );
+}
+
+function buildContextMenuItems(
+    entries: DirectoryContextMenuEntry[],
+    getHandler: (id: DirectoryContextMenuActionId) => (() => void)
+): ContextMenuItem[] {
+    return entries.map((entry) => {
+        if (entry.type === "separator") {
+            return { type: "separator" };
+        }
+        return {
+            label: entry.label,
+            click: getHandler(entry.id),
+        };
+    });
 }
 
 // Inline edit input component - completely isolated from parent events
@@ -158,6 +261,7 @@ interface TreeFileInfo extends FileInfo {
     isLoading?: boolean;
     isNestParent?: boolean;
     displayName?: string;
+    blocksExpansion?: boolean;
 }
 
 interface DirectoryTreeProps {
@@ -179,12 +283,14 @@ interface DirectoryTreeProps {
     clipboard: FileClipboard | null;
     setClipboard: React.Dispatch<React.SetStateAction<FileClipboard | null>>;
     onPaste: (clipboard: FileClipboard, targetDir: string) => Promise<void>;
+    onPasteFromClipboard: (targetDir: string, e?: ClipboardEvent) => Promise<boolean>;
     dirPath: string;
     // External file drop
     onExternalFileDrop: (files: File[], targetPath: string) => Promise<void>;
     // Inline new item creation from parent
     newItemRequest: { isDir: boolean; parentPath?: string } | null;
     onNewItemHandled: () => void;
+    autoRefreshRequest: { id: number; dirs: string[] };
 }
 
 function DirectoryTree({
@@ -204,36 +310,48 @@ function DirectoryTree({
     clipboard,
     setClipboard,
     onPaste,
+    onPasteFromClipboard,
     dirPath,
     onExternalFileDrop,
     newItemRequest,
     onNewItemHandled,
+    autoRefreshRequest,
 }: DirectoryTreeProps) {
-    const fullConfig = useAtomValue(atoms.fullConfigAtom);
     const setErrorMsg = useSetAtom(model.errorMsgAtom);
     const conn = useAtomValue(model.connection);
+    const connection = useAtomValue(model.connectionImmediate);
     const blockData = useAtomValue(model.blockAtom);
+    const storedTreeState = (blockData?.meta?.[DirectoryTreeStateMetaKey] ?? null) as DirectoryTreeState | null;
+    const persistedExpandedPaths = useMemo(
+        () => normalizeStoredExpandedPaths(storedTreeState, dirPath),
+        [storedTreeState, dirPath]
+    );
+    const isBlockFocused = useAtomValue(model.nodeModel.isFocused);
+    const homeDir = useMemo(() => getApi().getHomeDir(), []);
     const showHiddenFiles = useAtomValue(model.showHiddenFiles);
     const setShowHiddenFiles = useSetAtom(model.showHiddenFiles);
+    const fullConfig = useAtomValue(atoms.fullConfigAtom);
+    const mimetypes = fullConfig?.mimetypes ?? {};
     const osRef = useRef<OverlayScrollbarsComponentRef>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
 
     // Track expanded directories
-    const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+    const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set(persistedExpandedPaths));
     // Track inline editing state: { path: string, isNew: boolean, isDir: boolean }
     const [editingItem, setEditingItem] = useState<{ path: string; isNew: boolean; isDir: boolean } | null>(null);
     // Track loaded children for each directory
     const [childrenCache, setChildrenCache] = useState<Map<string, FileInfo[]>>(new Map());
+    const childrenCacheRef = useRef(childrenCache);
+    const expandedPathsRef = useRef(expandedPaths);
+    const reconcileInFlightRef = useRef(false);
     // Track loading state
     const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
     // Search/filter state
     const [searchQuery, setSearchQuery] = useState("");
     const [searchMatchCase, setSearchMatchCase] = useState(false);
     const [searchUseRegex, setSearchUseRegex] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
     const searchInputRef = useRef<HTMLInputElement>(null);
-    // Quick type-to-filter
-    const [filterText, setFilterText] = useState("");
-    const filterTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
     // Inline new item creation
     const [pendingNewItem, setPendingNewItem] = useState<{ parentPath: string; isDir: boolean } | null>(null);
     // Virtualized list state
@@ -249,93 +367,296 @@ function DirectoryTree({
 
     const pendingSetupDone = useRef(false);
 
-    // Listen to refreshVersion and reload expanded directories when it changes
+    useEffect(() => {
+        setExpandedPaths((prev) => (stringSetsEqual(prev, persistedExpandedPaths) ? prev : new Set(persistedExpandedPaths)));
+    }, [persistedExpandedPaths]);
+
+    useEffect(() => {
+        childrenCacheRef.current = childrenCache;
+    }, [childrenCache]);
+
+    useEffect(() => {
+        expandedPathsRef.current = expandedPaths;
+    }, [expandedPaths]);
+
+    const expandedPathsJson = useMemo(() => JSON.stringify(Array.from(expandedPaths).sort()), [expandedPaths]);
+    const persistedExpandedPathsJson = useMemo(
+        () => JSON.stringify(Array.from(persistedExpandedPaths).sort()),
+        [persistedExpandedPaths]
+    );
+
+    useEffect(() => {
+        const blockId = blockData?.oid;
+        if (!blockId || !dirPath) {
+            return;
+        }
+        if (expandedPathsJson === persistedExpandedPathsJson) {
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            fireAndForget(() =>
+                ObjectService.UpdateObjectMeta(
+                    WOS.makeORef("block", blockId),
+                    {
+                        [DirectoryTreeStateMetaKey]: {
+                            rootPath: dirPath,
+                            expandedPaths: Array.from(expandedPaths).sort(),
+                        },
+                    } as MetaType
+                )
+            );
+        }, 150);
+        return () => window.clearTimeout(timer);
+    }, [blockData?.oid, dirPath, expandedPaths, expandedPathsJson, persistedExpandedPathsJson]);
+
+    const closeSearch = useCallback(() => {
+        setSearchQuery("");
+        setSearchOpen(false);
+    }, []);
+    const openTerminalHere = useCallback(() => {
+        if (!dirPath) {
+            return;
+        }
+        getApi().openDirectoryTarget("terminal", dirPath, connection);
+    }, [connection, dirPath]);
+
+    useEffect(() => {
+        if (!searchOpen) {
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            searchInputRef.current?.focus();
+            searchInputRef.current?.select();
+        }, 0);
+        return () => window.clearTimeout(timer);
+    }, [searchOpen]);
+
+    const readDirectoryEntries = useCallback(
+        async (dp: string): Promise<FileInfo[]> => {
+            if (shouldSkipAutoDirectoryRead(dp, dirPath)) {
+                return [];
+            }
+            const file = await RpcApi.FileReadCommand(
+                TabRpcClient,
+                {
+                    info: {
+                        path: await model.formatRemoteUri(dp, globalStore.get),
+                    },
+                },
+                null
+            );
+            return filterInternalProbeEntries(file.entries ?? []);
+        },
+        [dirPath, model]
+    );
+
+    const refreshCachedDirectory = useCallback(
+        async (dp: string) => {
+            try {
+                const entries = await readDirectoryEntries(dp);
+                setChildrenCache((prev) => new Map(prev).set(dp, entries));
+            } catch (e) {
+                // Directory no longer exists - remove from cache and expanded state
+                console.error("Failed to reload directory:", dp, e);
+                setChildrenCache((prev) => {
+                    const next = new Map(prev);
+                    next.delete(dp);
+                    return next;
+                });
+                setExpandedPaths((prev) => {
+                    const next = new Set(prev);
+                    next.delete(dp);
+                    return next;
+                });
+            }
+        },
+        [readDirectoryEntries]
+    );
+
+    const reconcileCachedDirectory = useCallback(
+        async (dp: string) => {
+            try {
+                const entries = await readDirectoryEntries(dp);
+                const nextSignature = makeDirectoryEntriesSignature(entries);
+                const prevSignature = makeDirectoryEntriesSignature(childrenCacheRef.current.get(dp));
+                if (nextSignature === prevSignature) {
+                    return;
+                }
+                setChildrenCache((prev) => {
+                    const currentEntries = prev.get(dp);
+                    if (makeDirectoryEntriesSignature(currentEntries) === nextSignature) {
+                        return prev;
+                    }
+                    const next = new Map(prev);
+                    next.set(dp, entries);
+                    return next;
+                });
+            } catch (e) {
+                console.error("Failed to reconcile directory:", dp, e);
+                setChildrenCache((prev) => {
+                    if (!prev.has(dp)) {
+                        return prev;
+                    }
+                    const next = new Map(prev);
+                    next.delete(dp);
+                    return next;
+                });
+                setExpandedPaths((prev) => {
+                    if (!prev.has(dp)) {
+                        return prev;
+                    }
+                    const next = new Set(prev);
+                    next.delete(dp);
+                    return next;
+                });
+            }
+        },
+        [readDirectoryEntries]
+    );
+
+    // Manual refreshes still reload every expanded directory.
     const refreshVersion = useAtomValue(model.refreshVersion);
     useEffect(() => {
-        // Reload children for all expanded paths (keep old data visible until new data arrives)
-        const reloadExpandedDirs = async () => {
-            for (const dp of expandedPaths) {
-                try {
-                    const file = await RpcApi.FileReadCommand(
-                        TabRpcClient,
-                        {
-                            info: {
-                                path: await model.formatRemoteUri(dp, globalStore.get),
-                            },
-                        },
-                        null
-                    );
-                    const entries = file.entries ?? [];
-                    setChildrenCache((prev) => new Map(prev).set(dp, entries));
-                } catch (e) {
-                    // Directory no longer exists - remove from cache and expanded state
-                    console.error("Failed to reload directory:", dp, e);
-                    setChildrenCache((prev) => {
-                        const next = new Map(prev);
-                        next.delete(dp);
-                        return next;
-                    });
-                    setExpandedPaths((prev) => {
-                        const next = new Set(prev);
-                        next.delete(dp);
-                        return next;
-                    });
-                }
-            }
-        };
-        if (expandedPaths.size > 0) {
-            reloadExpandedDirs();
+        if (expandedPaths.size === 0) {
+            return;
         }
-    }, [refreshVersion]);
+        fireAndForget(() => Promise.all(Array.from(expandedPaths).map((dp) => refreshCachedDirectory(dp))));
+    }, [refreshVersion, expandedPaths, refreshCachedDirectory]);
+
+    // Automatic dirwatch refreshes only reload the affected expanded subdirectories.
+    useEffect(() => {
+        if (autoRefreshRequest.id === 0 || autoRefreshRequest.dirs.length === 0) {
+            return;
+        }
+        const normalizedRootDir = normalizeDirectoryWatchPath(dirPath, homeDir);
+        const expandedPathMap = new Map<string, string>();
+        for (const expandedPath of expandedPaths) {
+            const normalizedPath = normalizeDirectoryWatchPath(expandedPath, homeDir);
+            if (normalizedPath) {
+                expandedPathMap.set(normalizedPath, expandedPath);
+            }
+        }
+        const dirsToRefresh = Array.from(
+            new Set(
+                autoRefreshRequest.dirs
+                    .filter((dp) => dp !== normalizedRootDir)
+                    .map((dp) => expandedPathMap.get(dp))
+                    .filter((dp): dp is string => dp != null && !shouldSkipAutoDirectoryRead(dp, dirPath))
+            )
+        );
+        if (dirsToRefresh.length === 0) {
+            return;
+        }
+        fireAndForget(() => Promise.all(dirsToRefresh.map((dp) => refreshCachedDirectory(dp))));
+    }, [autoRefreshRequest, dirPath, expandedPaths, homeDir, refreshCachedDirectory]);
+
+    useEffect(() => {
+        if (!dirPath) {
+            return;
+        }
+        const intervalId = window.setInterval(() => {
+            if (reconcileInFlightRef.current) {
+                return;
+            }
+            const expandedToCheck = Array.from(expandedPathsRef.current).filter(
+                (dp) => dp !== dirPath && !shouldSkipAutoDirectoryRead(dp, dirPath)
+            );
+            if (expandedToCheck.length === 0) {
+                return;
+            }
+            reconcileInFlightRef.current = true;
+            fireAndForget(() =>
+                Promise.all(expandedToCheck.map((dp) => reconcileCachedDirectory(dp))).finally(() => {
+                    reconcileInFlightRef.current = false;
+                })
+            );
+        }, DirectoryReconcileFallbackIntervalMs);
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [dirPath, reconcileCachedDirectory]);
 
     // Subscribe to directory watch for expanded subdirectories
     const watchedExpandedRef = useRef<Set<string>>(new Set());
+    const watchBlockIdRef = useRef<string | null>(null);
+    const watchDirPathRef = useRef(dirPath);
+    const watchConnRef = useRef(connection);
+    useEffect(() => {
+        watchBlockIdRef.current = blockData?.oid ?? null;
+        watchDirPathRef.current = dirPath;
+        watchConnRef.current = connection;
+    }, [blockData?.oid, connection, dirPath]);
     useEffect(() => {
         const blockId = blockData?.oid;
-        if (!blockId || conn) return;
+        if (!blockId) return;
+        const dirWatchRpcOpts = isLocalConnName(connection) ? undefined : { route: makeConnRoute(connection) };
 
         const currentExpanded = new Set(expandedPaths);
         const prevWatched = watchedExpandedRef.current;
 
+        // Subscribe new paths
         for (const dp of currentExpanded) {
-            if (dp !== dirPath && !prevWatched.has(dp)) {
+            if (dp !== dirPath && !prevWatched.has(dp) && !shouldSkipAutoDirectoryRead(dp, dirPath)) {
                 fireAndForget(async () => {
                     try {
-                        await RpcApi.DirWatchSubscribeCommand(TabRpcClient, { dirpath: dp, blockid: blockId });
+                        await RpcApi.DirWatchSubscribeCommand(
+                            TabRpcClient,
+                            { dirpath: dp, blockid: blockId },
+                            dirWatchRpcOpts
+                        );
                     } catch (e) { /* ignore */ }
                 });
             }
         }
+        // Unsubscribe removed paths
         for (const dp of prevWatched) {
-            if (!currentExpanded.has(dp)) {
+            if (!currentExpanded.has(dp) || shouldSkipAutoDirectoryRead(dp, dirPath)) {
                 fireAndForget(async () => {
                     try {
-                        await RpcApi.DirWatchUnsubscribeCommand(TabRpcClient, { dirpath: dp, blockid: blockId });
+                        await RpcApi.DirWatchUnsubscribeCommand(
+                            TabRpcClient,
+                            { dirpath: dp, blockid: blockId },
+                            dirWatchRpcOpts
+                        );
                     } catch (e) { /* ignore */ }
                 });
             }
         }
         watchedExpandedRef.current = currentExpanded;
+    }, [expandedPaths, blockData?.oid, connection, dirPath]);
 
+    // Cleanup all expanded watches on unmount only
+    useEffect(() => {
         return () => {
-            for (const dp of currentExpanded) {
-                if (dp !== dirPath) {
+            const blockId = watchBlockIdRef.current;
+            const cleanupDirPath = watchDirPathRef.current;
+            const cleanupConnection = watchConnRef.current;
+            if (!blockId) return;
+            const dirWatchRpcOpts = isLocalConnName(cleanupConnection)
+                ? undefined
+                : { route: makeConnRoute(cleanupConnection) };
+            for (const dp of watchedExpandedRef.current) {
+                if (dp !== cleanupDirPath) {
                     fireAndForget(async () => {
                         try {
-                            await RpcApi.DirWatchUnsubscribeCommand(TabRpcClient, { dirpath: dp, blockid: blockId });
+                            await RpcApi.DirWatchUnsubscribeCommand(
+                                TabRpcClient,
+                                { dirpath: dp, blockid: blockId },
+                                dirWatchRpcOpts
+                            );
                         } catch (e) { /* ignore */ }
                     });
                 }
             }
         };
-    }, [expandedPaths, blockData?.oid, conn, dirPath]);
+    }, []);
 
     const setEntryManagerProps = useSetAtom(entryManagerOverlayPropsAtom);
 
     const getIconFromMimeType = useCallback(
         (mimeType: string): string => {
             while (mimeType.length > 0) {
-                const icon = fullConfig.mimetypes?.[mimeType]?.icon ?? null;
+                const icon = mimetypes[mimeType]?.icon ?? null;
                 if (isIconValid(icon)) {
                     return `fa fa-solid fa-${icon} fa-fw`;
                 }
@@ -343,12 +664,12 @@ function DirectoryTree({
             }
             return "fa fa-solid fa-file fa-fw";
         },
-        [fullConfig.mimetypes]
+        [mimetypes]
     );
 
     const getIconColor = useCallback(
-        (mimeType: string): string => fullConfig.mimetypes?.[mimeType]?.color ?? "inherit",
-        [fullConfig.mimetypes]
+        (mimeType: string): string => mimetypes[mimeType]?.color ?? "inherit",
+        [mimetypes]
     );
 
     const updateName = useCallback(
@@ -371,16 +692,7 @@ function DirectoryTree({
             setLoadingPaths((prev) => new Set(prev).add(dp));
 
             try {
-                const file = await RpcApi.FileReadCommand(
-                    TabRpcClient,
-                    {
-                        info: {
-                            path: await model.formatRemoteUri(dp, globalStore.get),
-                        },
-                    },
-                    null
-                );
-                const entries = file.entries ?? [];
+                const entries = await readDirectoryEntries(dp);
                 setChildrenCache((prev) => new Map(prev).set(dp, entries));
                 return entries;
             } catch (e) {
@@ -394,13 +706,14 @@ function DirectoryTree({
             }
             return null;
         },
-        [model, childrenCache, loadingPaths]
+        [childrenCache, loadingPaths, readDirectoryEntries]
     );
 
     // Toggle directory expansion
     const toggleExpand = useCallback(
         (path: string, isDir: boolean, isNestParent: boolean) => {
             if (!isDir && !isNestParent) return;
+            if (isDir && shouldSkipAutoDirectoryRead(path, dirPath)) return;
 
             setExpandedPaths((prev) => {
                 const next = new Set(prev);
@@ -415,7 +728,7 @@ function DirectoryTree({
                 return next;
             });
         },
-        [loadChildren]
+        [dirPath, loadChildren]
     );
 
     const matchesSearch = useCallback(
@@ -440,9 +753,6 @@ function DirectoryTree({
         (files: FileInfo[]): FileInfo[] => {
             const direction = prefs.sortDir === "desc" ? -1 : 1;
             return [...files].sort((a, b) => {
-                // ".." always first
-                if (a.name === "..") return -1;
-                if (b.name === "..") return 1;
                 // Optional folders first
                 if (prefs.foldersFirst) {
                     if (a.isdir && !b.isdir) return -1;
@@ -485,7 +795,6 @@ function DirectoryTree({
         (entries: FileInfo[]): { entries: FileInfo[]; nestedMap: Map<string, FileInfo[]> } => {
             const filtered = entries.filter((fileInfo) => {
                 if (!fileInfo?.name) return false;
-                if (fileInfo.name === "..") return true;
                 if (!showHiddenFiles && fileInfo.name.startsWith(".")) return false;
                 return true;
             });
@@ -496,7 +805,7 @@ function DirectoryTree({
             }
 
             const groups = new Map<string, FileInfo[]>();
-            const isNestable = (item: FileInfo) => !item.isdir && item.name && item.name !== "..";
+            const isNestable = (item: FileInfo) => !item.isdir && item.name;
             for (const item of sorted) {
                 if (!isNestable(item)) continue;
                 const name = item.name ?? "";
@@ -560,13 +869,14 @@ function DirectoryTree({
                 let effectivePath = item.path;
                 let effectiveChildren = item.isdir ? childrenCache.get(item.path) : undefined;
                 let isCompact = false;
+                const blocksExpansion = item.isdir && shouldSkipAutoDirectoryRead(item.path, dirPath);
 
-                if (prefs.compactFolders && item.isdir && item.name !== "..") {
+                if (prefs.compactFolders && item.isdir && !blocksExpansion) {
                     let curPath = item.path;
                     let curName = item.name ?? "";
                     let curChildren = effectiveChildren;
                     while (curChildren && curChildren.length > 0) {
-                        const prepared = prepareEntries(curChildren).entries.filter((child) => child.name !== "..");
+                        const prepared = prepareEntries(curChildren).entries;
                         const dirChildren = prepared.filter((child) => child.isdir);
                         const fileChildren = prepared.filter((child) => !child.isdir);
                         if (fileChildren.length > 0 || dirChildren.length !== 1) {
@@ -592,7 +902,7 @@ function DirectoryTree({
                     (item.isdir && effectiveChildren && effectiveChildren.length > 0) ||
                     (isNestParent && (nestedMap.get(item.path)?.length ?? 0) > 0);
 
-                const effectiveName = item.name === ".." ? ".." : (effectivePath.split("/").pop() ?? item.name);
+                const effectiveName = effectivePath.split("/").pop() ?? item.name;
                 const treeItem: TreeFileInfo = {
                     ...item,
                     name: effectiveName,
@@ -602,6 +912,7 @@ function DirectoryTree({
                     isExpanded: isExpanded && hasExpandableChildren,
                     isLoading: loadingPaths.has(effectivePath),
                     isNestParent,
+                    blocksExpansion,
                 };
                 parentMap.set(effectivePath, parentPath);
                 result.push(treeItem);
@@ -661,8 +972,7 @@ function DirectoryTree({
         let depth: number;
 
         if (isRoot) {
-            const dotdotIdx = result.findIndex((item) => item.name === "..");
-            insertIdx = dotdotIdx >= 0 ? dotdotIdx + 1 : 0;
+            insertIdx = 0;
             depth = 0;
         } else {
             const parentIdx = result.findIndex((item) => item.path === pendingNewItem.parentPath);
@@ -693,7 +1003,6 @@ function DirectoryTree({
         (isDir: boolean) => {
             setPendingNewItem(null);
             setEditingItem(null);
-            setFilterText("");
             setSearchQuery("");
             pendingSetupDone.current = false;
 
@@ -806,7 +1115,6 @@ function DirectoryTree({
 
     // Register directoryKeyDownHandler inside DirectoryTree (has access to flatData, expandedPaths, etc.)
     useEffect(() => {
-        const selectedPath = flatData[focusIndex]?.path ?? null;
         model.directoryKeyDownHandler = (waveEvent: WaveKeyboardEvent): boolean => {
             // Don't handle keys when editing
             if (editingItem != null) return false;
@@ -817,8 +1125,7 @@ function DirectoryTree({
 
             // Cmd/Ctrl+F - focus search
             if (checkKeyPressed(waveEvent, "Cmd:f") || checkKeyPressed(waveEvent, "Ctrl:f")) {
-                searchInputRef.current?.focus();
-                searchInputRef.current?.select();
+                setSearchOpen(true);
                 return true;
             }
 
@@ -877,54 +1184,7 @@ function DirectoryTree({
 
             // Cmd/Ctrl+V - Paste
             if (checkKeyPressed(waveEvent, "Cmd:v") || checkKeyPressed(waveEvent, "Ctrl:v")) {
-                const focusedItem = flatData[focusIndex];
-                const targetDir = focusedItem?.isdir && focusedItem.name !== ".." ? focusedItem.path : dirPath;
-                if (clipboard) {
-                    fireAndForget(() => onPaste(clipboard, targetDir));
-                } else {
-                    // Try system clipboard files
-                    fireAndForget(async () => {
-                        const files = await getApi().readClipboardFiles();
-                        if (files.length > 0) {
-                            for (const srcPath of files) {
-                                const name = srcPath.split("/").pop();
-                                const desturi = await model.formatRemoteUri(targetDir + "/" + name, globalStore.get);
-                                try {
-                                    await RpcApi.FileCopyCommand(TabRpcClient, {
-                                        srcuri: "wsh://local" + srcPath,
-                                        desturi,
-                                        opts: { timeout: 31536000000 },
-                                    });
-                                } catch (e) {
-                                    console.warn("Paste from system clipboard failed:", e);
-                                }
-                            }
-                            model.refreshCallback?.();
-                            return;
-                        }
-                        // Try pasting image from clipboard
-                        try {
-                            const clipboardItems = await navigator.clipboard.read();
-                            for (const item of clipboardItems) {
-                                if (item.types.includes("image/png")) {
-                                    const blob = await item.getType("image/png");
-                                    const arrayBuffer = await blob.arrayBuffer();
-                                    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-                                    const fileName = `image-${Date.now()}.png`;
-                                    const filePath = await model.formatRemoteUri(targetDir + "/" + fileName, globalStore.get);
-                                    await RpcApi.FileWriteCommand(TabRpcClient, {
-                                        info: { path: filePath },
-                                        data64: base64,
-                                    });
-                                    model.refreshCallback?.();
-                                    break;
-                                }
-                            }
-                        } catch (e) {
-                            // Clipboard API may not be available
-                        }
-                    });
-                }
+                getApi().nativePaste();
                 return true;
             }
 
@@ -1021,7 +1281,7 @@ function DirectoryTree({
             if (checkKeyPressed(waveEvent, "ArrowLeft")) {
                 const item = flatData[focusIndex];
                 if (item) {
-                    if ((item.isdir || item.isNestParent) && expandedPaths.has(item.path)) {
+                    if ((item.isdir || item.isNestParent) && !item.blocksExpansion && expandedPaths.has(item.path)) {
                         // Collapse the directory
                         toggleExpand(item.path, item.isdir, item.isNestParent ?? false);
                     } else if (item.depth > 0) {
@@ -1040,7 +1300,7 @@ function DirectoryTree({
             // ArrowRight - expand or go to first child
             if (checkKeyPressed(waveEvent, "ArrowRight")) {
                 const item = flatData[focusIndex];
-                const isExpandable = item && ((item.isdir && item.name !== "..") || item.isNestParent);
+                const isExpandable = item && !item.blocksExpansion && ((item.isdir && item.name !== "..") || item.isNestParent);
                 if (isExpandable && item) {
                     if (!expandedPaths.has(item.path)) {
                         toggleExpand(item.path, item.isdir, item.isNestParent ?? false);
@@ -1088,66 +1348,33 @@ function DirectoryTree({
                         model.goHistory(item.path);
                     } else {
                         fireAndForget(async () => {
-                            await createBlock({
-                                meta: {
-                                    view: "preview",
-                                    file: item.path,
-                                    connection: conn,
-                                },
-                            });
+                            await createBlockAtRightmost(
+                                {
+                                    meta: {
+                                        view: "preview",
+                                        file: item.path,
+                                        connection: conn,
+                                    },
+                                }
+                            );
                         });
                     }
                 }
                 return true;
             }
 
-            // Space - Quicklook (macOS only, local only)
-            if (
-                checkKeyPressed(waveEvent, "Space") &&
-                PLATFORM === PlatformMacOS &&
-                !blockData?.meta?.connection
-            ) {
-                if (selectedPath) {
-                    getApi().onQuicklook(selectedPath);
-                }
-                return true;
-            }
-
-            // Type-to-filter: character keys
-            if (isCharacterKeyEvent(waveEvent)) {
-                setFilterText((prev) => prev + waveEvent.key);
-                if (filterTimeoutRef.current) {
-                    clearTimeout(filterTimeoutRef.current);
-                }
-                filterTimeoutRef.current = setTimeout(() => setFilterText(""), 1500);
-                return true;
-            }
-
             // Escape - clear filter
             if (checkKeyPressed(waveEvent, "Escape")) {
                 if (searchQuery) {
-                    setSearchQuery("");
+                    closeSearch();
                     return true;
                 }
-                if (filterText) {
-                    setFilterText("");
+                if (searchOpen) {
+                    setSearchOpen(false);
                     return true;
                 }
                 if (selectedPaths.size > 0) {
                     setSelectedPaths(new Set());
-                    return true;
-                }
-                return false;
-            }
-
-            // Backspace - remove last filter char
-            if (checkKeyPressed(waveEvent, "Backspace")) {
-                if (filterText) {
-                    setFilterText((prev) => prev.slice(0, -1));
-                    if (filterTimeoutRef.current) {
-                        clearTimeout(filterTimeoutRef.current);
-                    }
-                    filterTimeoutRef.current = setTimeout(() => setFilterText(""), 1500);
                     return true;
                 }
                 return false;
@@ -1160,22 +1387,10 @@ function DirectoryTree({
         };
     }, [
         flatData, focusIndex, selectedPaths, clipboard, editingItem, expandedPaths,
-        dirPath, conn, blockData, filterText, searchQuery, model, setFocusIndex, focusAndScroll,
-        setSelectedPaths, setClipboard, onPaste, startNewItem, updateName, setErrorMsg, toggleExpand,
-        showHiddenFiles, setShowHiddenFiles,
+        dirPath, conn, searchOpen, searchQuery, model, setFocusIndex, focusAndScroll,
+        setSelectedPaths, setClipboard, startNewItem, updateName, setErrorMsg, toggleExpand,
+        showHiddenFiles, setShowHiddenFiles, closeSearch,
     ]);
-
-    // Type-to-filter: jump to first matching item
-    useEffect(() => {
-        if (!filterText) return;
-        const lowerFilter = filterText.toLowerCase();
-        const matchIdx = flatData.findIndex(
-            (item) => item.name !== ".." && item.name?.toLowerCase().includes(lowerFilter)
-        );
-        if (matchIdx >= 0) {
-            focusAndScroll(matchIdx);
-        }
-    }, [filterText, flatData]);
 
     // Helper: get selected items (or focused item if no selection)
     const getSelectedItems = useCallback((): TreeFileInfo[] => {
@@ -1189,6 +1404,43 @@ function DirectoryTree({
         return [];
     }, [flatData, focusIndex, selectedPaths]);
 
+    const getPasteTargetDir = useCallback(() => {
+        const focusedItem = flatData[focusIndex];
+        return focusedItem?.isdir && focusedItem.name !== ".." ? focusedItem.path : dirPath;
+    }, [dirPath, flatData, focusIndex]);
+
+    const writeClipboardText = useCallback(async (text: string) => {
+        await getApi().writeClipboardText(text);
+    }, []);
+
+    useEffect(() => {
+        const handleWindowPaste = (e: ClipboardEvent) => {
+            if (!isBlockFocused || !document.hasFocus() || editingItem != null) {
+                return;
+            }
+            const activeEl = document.activeElement as HTMLElement | null;
+            if (
+                activeEl === searchInputRef.current ||
+                activeEl?.tagName === "INPUT" ||
+                activeEl?.tagName === "TEXTAREA" ||
+                activeEl?.isContentEditable
+            ) {
+                return;
+            }
+            const targetDir = getPasteTargetDir();
+            e.preventDefault();
+            e.stopPropagation();
+            fireAndForget(async () => {
+                await onPasteFromClipboard(targetDir, e);
+            });
+        };
+
+        window.addEventListener("paste", handleWindowPaste, true);
+        return () => {
+            window.removeEventListener("paste", handleWindowPaste, true);
+        };
+    }, [editingItem, getPasteTargetDir, isBlockFocused, onPasteFromClipboard]);
+
     const collapseAll = useCallback(() => {
         setExpandedPaths(new Set());
     }, []);
@@ -1197,28 +1449,28 @@ function DirectoryTree({
         (e: React.MouseEvent) => {
             const menu: ContextMenuItem[] = [
                 {
-                    label: "Sort By",
+                    label: "排序方式",
                     submenu: [
                         {
-                            label: "Name",
+                            label: "名称",
                             type: "radio",
                             checked: prefs.sortMode === "name",
                             click: () => updatePrefs({ sortMode: "name" }),
                         },
                         {
-                            label: "Type",
+                            label: "类型",
                             type: "radio",
                             checked: prefs.sortMode === "type",
                             click: () => updatePrefs({ sortMode: "type" }),
                         },
                         {
-                            label: "Size",
+                            label: "大小",
                             type: "radio",
                             checked: prefs.sortMode === "size",
                             click: () => updatePrefs({ sortMode: "size" }),
                         },
                         {
-                            label: "Modified",
+                            label: "修改时间",
                             type: "radio",
                             checked: prefs.sortMode === "modified",
                             click: () => updatePrefs({ sortMode: "modified" }),
@@ -1226,16 +1478,16 @@ function DirectoryTree({
                     ],
                 },
                 {
-                    label: "Sort Order",
+                    label: "排序顺序",
                     submenu: [
                         {
-                            label: "Ascending",
+                            label: "升序",
                             type: "radio",
                             checked: prefs.sortDir === "asc",
                             click: () => updatePrefs({ sortDir: "asc" }),
                         },
                         {
-                            label: "Descending",
+                            label: "降序",
                             type: "radio",
                             checked: prefs.sortDir === "desc",
                             click: () => updatePrefs({ sortDir: "desc" }),
@@ -1244,31 +1496,31 @@ function DirectoryTree({
                 },
                 { type: "separator" },
                 {
-                    label: "Folders First",
+                    label: "文件夹优先",
                     type: "checkbox",
                     checked: prefs.foldersFirst,
                     click: () => updatePrefs({ foldersFirst: !prefs.foldersFirst }),
                 },
                 {
-                    label: "Compact Folders",
+                    label: "压缩文件夹显示",
                     type: "checkbox",
                     checked: prefs.compactFolders,
                     click: () => updatePrefs({ compactFolders: !prefs.compactFolders }),
                 },
                 {
-                    label: "File Nesting",
+                    label: "文件嵌套",
                     type: "checkbox",
                     checked: prefs.fileNesting,
                     click: () => updatePrefs({ fileNesting: !prefs.fileNesting }),
                 },
                 {
-                    label: "Show Icons",
+                    label: "显示图标",
                     type: "checkbox",
                     checked: prefs.showIcons,
                     click: () => updatePrefs({ showIcons: !prefs.showIcons }),
                 },
                 {
-                    label: "Show Hidden Files",
+                    label: "显示隐藏文件",
                     type: "checkbox",
                     checked: showHiddenFiles,
                     click: () => setShowHiddenFiles(!showHiddenFiles),
@@ -1367,157 +1619,104 @@ function DirectoryTree({
     );
 
     const handleFileContextMenu = useCallback(
-        async (e: any, finfo: FileInfo) => {
+        async (e: any, finfo: FileInfo, idx: number) => {
             e.preventDefault();
             e.stopPropagation();
             if (finfo == null) return;
 
-            const fileName = finfo.path.split("/").pop();
+            const fileName = finfo.path.split("/").pop() ?? finfo.name ?? "";
             const relativePath =
                 dirPath && finfo.path.startsWith(dirPath + "/") ? finfo.path.slice(dirPath.length + 1) : null;
-            const menu: ContextMenuItem[] = [];
+            const { nextSelectedPaths, actionPaths } = resolveDirectoryContextSelection(selectedPaths, finfo);
+            const actionPathSet = new Set(actionPaths);
+            const contextItems = flatData.filter((item) => actionPathSet.has(item.path) && item.name !== "..");
+            const itemsToOperate = contextItems.length > 0 ? contextItems : finfo.name !== ".." ? [finfo] : [];
 
-            // Add "Open Folder" and "Add to Bookmarks" options for directories
-            if (finfo.isdir && finfo.name !== "..") {
-                menu.push({
-                    label: "Open Folder",
-                    click: () => {
-                        model.goHistory(finfo.path);
-                    },
-                });
-                menu.push({
-                    label: "Open in Terminal",
-                    click: () => {
-                        fireAndForget(async () => {
-                            await createBlock({
-                                meta: {
-                                    view: "term",
-                                    controller: "shell",
-                                    "cmd:cwd": finfo.path,
-                                    connection: conn,
-                                },
-                            });
-                        });
-                    },
-                });
-                menu.push({
-                    label: "Add to Bookmarks",
-                    click: () => {
-                        const defaultLabel = finfo.name || finfo.path.split("/").pop() || "Bookmark";
-                        setEntryManagerProps({
-                            entryManagerType: EntryManagerType.BookmarkLabel,
-                            startingValue: defaultLabel,
-                            onSave: (bookmarkLabel: string) => {
-                                fireAndForget(() => model.addBookmark(finfo.path, bookmarkLabel));
-                                setEntryManagerProps(undefined);
-                            },
-                        });
-                    },
-                });
-                menu.push({ type: "separator" });
-            } else if (finfo.isdir && finfo.name === "..") {
-                menu.push({
-                    label: "Open Folder",
-                    click: () => {
-                        model.goHistory(finfo.path);
-                    },
-                });
-                menu.push({ type: "separator" });
-            } else {
-                // File: Open in Terminal uses parent directory
-                menu.push({
-                    label: "Open in Terminal",
-                    click: () => {
-                        fireAndForget(async () => {
-                            const parentDir = finfo.path.replace(/\/[^/]+$/, "");
-                            await createBlock({
-                                meta: {
-                                    view: "term",
-                                    controller: "shell",
-                                    "cmd:cwd": parentDir,
-                                    connection: conn,
-                                },
-                            });
-                        });
-                    },
-                });
-            }
+            setFocusIndex(idx);
+            setLastClickedIndex(idx);
+            setSelectedPaths(new Set(nextSelectedPaths));
 
-            // Reveal in Finder (local only)
-            if (!conn) {
-                menu.push({
-                    label: "Reveal in Finder",
-                    click: () => getApi().showItemInFolder(finfo.path),
-                });
-            }
-
-            menu.push({ type: "separator" });
-            menu.push(
-                { label: "New File", click: () => startNewItem(false) },
-                { label: "New Folder", click: () => startNewItem(true) },
-                { label: "Rename", click: () => updateName(finfo.path, finfo.isdir) },
-                { type: "separator" },
-                { label: "Copy", click: () => {
-                    const items = getSelectedItems();
-                    if (items.length > 0) {
-                        setClipboard({
-                            paths: items.map((i) => i.path),
-                            names: items.map((i) => i.name),
-                            isDirs: items.map((i) => i.isdir),
-                            operation: "copy",
-                        });
-                    }
-                }},
-                { label: "Cut", click: () => {
-                    const items = getSelectedItems();
-                    if (items.length > 0) {
-                        setClipboard({
-                            paths: items.map((i) => i.path),
-                            names: items.map((i) => i.name),
-                            isDirs: items.map((i) => i.isdir),
-                            operation: "cut",
-                        });
-                    }
-                }},
-            );
-            if (clipboard) {
-                const targetDir = finfo.isdir && finfo.name !== ".." ? finfo.path : dirPath;
-                menu.push({
-                    label: `Paste (${clipboard.paths.length} item${clipboard.paths.length > 1 ? "s" : ""})`,
-                    click: () => fireAndForget(() => onPaste(clipboard, targetDir)),
-                });
-            }
-            menu.push(
-                { type: "separator" },
-                { label: "Copy File Name", click: () => fireAndForget(() => navigator.clipboard.writeText(fileName)) },
-                { label: "Copy Full File Name", click: () => fireAndForget(() => navigator.clipboard.writeText(finfo.path)) },
-                { label: "Copy File Name (Shell Quoted)", click: () => fireAndForget(() => navigator.clipboard.writeText(shellQuote([fileName]))) },
-                { label: "Copy Full File Name (Shell Quoted)", click: () => fireAndForget(() => navigator.clipboard.writeText(shellQuote([finfo.path]))) },
-            );
-            if (relativePath) {
-                menu.push(
-                    { label: "Copy Relative Path", click: () => fireAndForget(() => navigator.clipboard.writeText(relativePath)) },
-                    { label: "Copy Relative Path (Shell Quoted)", click: () => fireAndForget(() => navigator.clipboard.writeText(shellQuote([relativePath]))) },
-                );
-            }
-            addOpenMenuItems(menu, conn, finfo);
-            menu.push(
-                { type: "separator" },
-                { label: "Delete", click: () => {
-                    if (selectedPaths.size > 0) {
-                        for (const p of selectedPaths) {
-                            handleFileDelete(model, p, false, setErrorMsg);
-                        }
-                        setSelectedPaths(new Set());
-                    } else {
-                        handleFileDelete(model, finfo.path, false, setErrorMsg);
-                    }
-                }}
-            );
-            ContextMenuModel.showContextMenu(menu, e);
+            const menuEntries = buildDirectoryItemMenuEntries({
+                conn,
+                finfo,
+                locale: DirectoryMenuLocale,
+                relativePath,
+            });
+            const menu = buildContextMenuItems(menuEntries, (id) => {
+                switch (id) {
+                    case "open-wave-directory":
+                        return () => {
+                            model.goHistory(finfo.path);
+                        };
+                    case "open-new-tab":
+                        return () => {
+                            getApi().openFileInNewTab(finfo.path, conn);
+                        };
+                    case "bookmark":
+                        return () => {
+                            const defaultLabel = finfo.name || finfo.path.split("/").pop() || "书签";
+                            fireAndForget(() => model.addBookmark(finfo.path, defaultLabel));
+                        };
+                    case "rename":
+                        return () => {
+                            updateName(finfo.path, finfo.isdir);
+                        };
+                    case "copy":
+                        return () => {
+                            if (itemsToOperate.length > 0) {
+                                setClipboard({
+                                    paths: itemsToOperate.map((item) => item.path),
+                                    names: itemsToOperate.map((item) => item.name),
+                                    isDirs: itemsToOperate.map((item) => item.isdir),
+                                    operation: "copy",
+                                });
+                            }
+                        };
+                    case "cut":
+                        return () => {
+                            if (itemsToOperate.length > 0) {
+                                setClipboard({
+                                    paths: itemsToOperate.map((item) => item.path),
+                                    names: itemsToOperate.map((item) => item.name),
+                                    isDirs: itemsToOperate.map((item) => item.isdir),
+                                    operation: "cut",
+                                });
+                            }
+                        };
+                    case "copy-name":
+                        return () => fireAndForget(() => writeClipboardText(fileName));
+                    case "copy-path":
+                        return () => fireAndForget(() => writeClipboardText(finfo.path));
+                    case "copy-relative-path":
+                        return () => fireAndForget(() => writeClipboardText(relativePath ?? ""));
+                    case "delete":
+                        return () => {
+                            for (const item of itemsToOperate) {
+                                handleFileDelete(model, item.path, false, setErrorMsg);
+                            }
+                            setSelectedPaths(new Set());
+                        };
+                    default:
+                        return getOpenMenuActionHandler(id as OpenMenuActionId, conn, finfo);
+                }
+            });
+            ContextMenuModel.showContextMenu(normalizeMenuSeparators(menu), e);
         },
-        [conn, model, startNewItem, updateName, setErrorMsg, setEntryManagerProps,
-         clipboard, selectedPaths, dirPath, onPaste, getSelectedItems, setClipboard, setSelectedPaths]
+        [
+            conn,
+            dirPath,
+            flatData,
+            model,
+            selectedPaths,
+            setClipboard,
+            setEntryManagerProps,
+            setErrorMsg,
+            setFocusIndex,
+            setLastClickedIndex,
+            setSelectedPaths,
+            updateName,
+            writeClipboardText,
+        ]
     );
 
     const overscan = 6;
@@ -1530,82 +1729,104 @@ function DirectoryTree({
     const visibleRows = flatData.slice(startIndex, endIndex);
     const paddingTop = startIndex * VirtualRowHeight;
     const paddingBottom = Math.max(0, (totalRows - endIndex) * VirtualRowHeight);
+    const showSearchBar = searchOpen || searchQuery.length > 0;
 
     return (
         <div className="dir-tree">
             <div className="dir-tree-controls">
-                <div className="dir-tree-search">
-                    <i className="fa fa-search" />
-                    <input
-                        ref={searchInputRef}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Escape") {
-                                e.preventDefault();
-                                setSearchQuery("");
-                                searchInputRef.current?.blur();
-                            }
-                        }}
-                        placeholder="Filter files"
-                    />
-                    {searchQuery ? (
+                {showSearchBar ? (
+                    <div className="dir-tree-search">
+                        <i className="fa fa-search" />
+                        <input
+                            ref={searchInputRef}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    closeSearch();
+                                }
+                            }}
+                            placeholder="搜索文件"
+                        />
+                        {searchQuery ? (
+                            <button
+                                className="dir-tree-control-button"
+                                onClick={() => setSearchQuery("")}
+                                title="清空搜索"
+                            >
+                                <i className="fa fa-times" />
+                            </button>
+                        ) : null}
                         <button
-                            className="dir-tree-control-button"
-                            onClick={() => setSearchQuery("")}
-                            title="Clear search"
+                            className={clsx("dir-tree-control-toggle", { active: searchMatchCase })}
+                            onClick={() => setSearchMatchCase((prev) => !prev)}
+                            title="区分大小写"
                         >
-                            <i className="fa fa-times" />
+                            Aa
                         </button>
-                    ) : null}
-                    <button
-                        className={clsx("dir-tree-control-toggle", { active: searchMatchCase })}
-                        onClick={() => setSearchMatchCase((prev) => !prev)}
-                        title="Match case"
-                    >
-                        Aa
-                    </button>
-                    <button
-                        className={clsx("dir-tree-control-toggle", { active: searchUseRegex })}
-                        onClick={() => setSearchUseRegex((prev) => !prev)}
-                        title="Use regex"
-                    >
-                        .*
-                    </button>
-                </div>
+                        <button
+                            className={clsx("dir-tree-control-toggle", { active: searchUseRegex })}
+                            onClick={() => setSearchUseRegex((prev) => !prev)}
+                            title="使用正则"
+                        >
+                            .*
+                        </button>
+                    </div>
+                ) : null}
                 <div className="dir-tree-actions">
                     <button
                         className="dir-tree-control-button"
+                        onClick={() => {
+                            if (showSearchBar) {
+                                closeSearch();
+                                return;
+                            }
+                            setSearchOpen(true);
+                        }}
+                        title={showSearchBar ? "收起搜索" : "搜索"}
+                    >
+                        <i className="fa fa-search" />
+                    </button>
+                    <button
+                        className="dir-tree-control-button"
+                        onClick={() => model.triggerRefresh()}
+                        title="刷新"
+                    >
+                        <i className="fa fa-rotate-right" />
+                    </button>
+                    <button
+                        className="dir-tree-control-button"
+                        onClick={openTerminalHere}
+                        title="在此处打开终端"
+                    >
+                        <i className="fa fa-terminal" />
+                    </button>
+                    <button
+                        className="dir-tree-control-button"
                         onClick={() => startNewItem(false)}
-                        title="New File"
+                        title="新建文件"
                     >
                         <i className="fa fa-file" />
                     </button>
                     <button
                         className="dir-tree-control-button"
                         onClick={() => startNewItem(true)}
-                        title="New Folder"
+                        title="新建文件夹"
                     >
                         <i className="fa fa-folder" />
                     </button>
                     <button
                         className="dir-tree-control-button"
-                        onClick={() => model.refreshCallback?.()}
-                        title="Refresh"
-                    >
-                        <i className="fa fa-rotate-right" />
-                    </button>
-                    <button
-                        className="dir-tree-control-button"
                         onClick={collapseAll}
-                        title="Collapse all"
+                        title="全部折叠"
                     >
                         <i className="fa fa-compress" />
                     </button>
                     <button
                         className="dir-tree-control-button"
                         onClick={handleViewOptionsMenu}
-                        title="View options"
+                        title="视图选项"
                     >
                         <i className="fa fa-sliders" />
                     </button>
@@ -1624,6 +1845,7 @@ function DirectoryTree({
                             <TreeRow
                                 key={item.path + "-" + idx}
                                 model={model}
+                                currentDirPath={dirPath}
                                 item={item}
                                 idx={idx}
                                 focusIndex={focusIndex}
@@ -1686,29 +1908,18 @@ function DirectoryTree({
                     <div style={{ height: paddingBottom }} />
                     {totalRows === 0 && (
                         <div className="dir-tree-empty">
-                            {searchQuery ? "No matches" : "No files"}
+                            {searchQuery ? "没有匹配项" : "没有文件"}
                         </div>
                     )}
                 </div>
             </OverlayScrollbarsComponent>
-            {filterText && (
-                <div className="dir-tree-filter-bar">
-                    <span className="dir-tree-filter-text">Filter: </span>
-                    <span>{filterText}</span>
-                    <span
-                        className="dir-tree-filter-close"
-                        onClick={() => setFilterText("")}
-                    >
-                        <i className="fa fa-times" />
-                    </span>
-                </div>
-            )}
         </div>
     );
 }
 
 interface TreeRowProps {
     model: PreviewModel;
+    currentDirPath: string;
     item: TreeFileInfo;
     idx: number;
     focusIndex: number;
@@ -1716,7 +1927,7 @@ interface TreeRowProps {
     toggleExpand: (path: string, isDir: boolean, isNestParent: boolean) => void;
     getIconFromMimeType: (mimeType: string) => string;
     getIconColor: (mimeType: string) => string;
-    handleFileContextMenu: (e: any, finfo: FileInfo) => Promise<void>;
+    handleFileContextMenu: (e: any, finfo: FileInfo, idx: number) => Promise<void>;
     onFileDrop: (draggedFile: DraggedFile, targetPath: string) => Promise<void>;
     onExternalFileDrop: (files: File[], targetPath: string) => Promise<void>;
     isEditing: boolean;
@@ -1733,6 +1944,7 @@ interface TreeRowProps {
 
 function TreeRow({
     model,
+    currentDirPath,
     item,
     idx,
     focusIndex,
@@ -1754,12 +1966,11 @@ function TreeRow({
     highlightUseRegex,
     showIcons,
 }: TreeRowProps) {
-    const dirPath = useAtomValue(model.statFilePath);
-    const connection = useAtomValue(model.connection);
+    const connection = useAtomValue(model.connectionImmediate);
 
     const dragItem: DraggedFile = {
         relName: item.name,
-        absParent: dirPath,
+        absParent: currentDirPath,
         uri: formatRemoteUri(item.path, connection),
         isDir: item.isdir,
     };
@@ -1822,7 +2033,7 @@ function TreeRow({
     );
 
     const handleDoubleClick = useCallback(() => {
-        if (item.isdir && item.name !== "..") {
+        if (item.isdir && item.name !== ".." && !item.blocksExpansion) {
             // Double-click on directory: expand/collapse
             toggleExpand(item.path, true, item.isNestParent ?? false);
         } else if (item.isNestParent) {
@@ -1831,16 +2042,17 @@ function TreeRow({
             // Double-click on "..": navigate to parent
             model.goHistory(item.path);
         } else {
-            // Double-click on file: open in new block
+            // Double-click on file: open in a right-side split
             fireAndForget(async () => {
-                const blockDef: BlockDef = {
-                    meta: {
-                        view: "preview",
-                        file: item.path,
-                        connection: connection,
-                    },
-                };
-                await createBlock(blockDef);
+                await createBlockAtRightmost(
+                    {
+                        meta: {
+                            view: "preview",
+                            file: item.path,
+                            connection: connection,
+                        },
+                    }
+                );
             });
         }
     }, [item, model, toggleExpand, connection]);
@@ -1853,9 +2065,28 @@ function TreeRow({
         [item, toggleExpand]
     );
 
+    const handleNativeDragStartCapture = useCallback(
+        (e: React.DragEvent<HTMLDivElement>) => {
+            // Populate native drag payload so external apps (e.g. Ghostty) can receive the file path.
+            if (!e.dataTransfer || item.name === ".." || !item.path) {
+                return;
+            }
+            // Prefer shell-escaped text so dropping into terminals inserts a runnable path.
+            e.dataTransfer.setData("text/plain", shellQuote([item.path]));
+            const isPosixPath = item.path.startsWith("/");
+            const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(item.path);
+            if (isPosixPath || isWindowsPath) {
+                const normalizedPath = isWindowsPath ? `/${item.path.replace(/\\/g, "/")}` : item.path;
+                e.dataTransfer.setData("text/uri-list", `file://${encodeURI(normalizedPath)}`);
+            }
+            e.dataTransfer.effectAllowed = "copyMove";
+        },
+        [item.name, item.path]
+    );
+
     // Render chevron for directories or nested files
     const renderChevron = () => {
-        const isExpandable = (item.isdir && item.name !== "..") || item.isNestParent;
+        const isExpandable = !item.blocksExpansion && ((item.isdir && item.name !== "..") || item.isNestParent);
         if (!isExpandable || !item.name) {
             return <span className="dir-tree-chevron-placeholder" />;
         }
@@ -1953,7 +2184,8 @@ function TreeRow({
             style={{ paddingLeft: `${8 + item.depth * 16}px` }}
             onClick={isEditing ? undefined : handleClick}
             onDoubleClick={isEditing ? undefined : handleDoubleClick}
-            onContextMenu={isEditing ? undefined : (e) => handleFileContextMenu(e, item)}
+            onContextMenu={isEditing ? undefined : (e) => handleFileContextMenu(e, item, idx)}
+            onDragStartCapture={handleNativeDragStartCapture}
             ref={dragDropRef}
         >
             {renderChevron()}
@@ -1979,14 +2211,24 @@ interface DirectoryPreviewProps {
 function DirectoryPreview({ model }: DirectoryPreviewProps) {
     const [focusIndex, setFocusIndex] = useState(0);
     const [unfilteredData, setUnfilteredData] = useState<FileInfo[]>([]);
+    const unfilteredDataRef = useRef(unfilteredData);
+    const rootReconcileInFlightRef = useRef(false);
+    const [stableDirInfo, setStableDirInfo] = useState<FileInfo | null>(null);
     const showHiddenFiles = useAtomValue(model.showHiddenFiles);
     const [selectedPath, setSelectedPath] = useState("");
     const [refreshVersion, setRefreshVersion] = useAtom(model.refreshVersion);
     const conn = useAtomValue(model.connection);
+    const connection = useAtomValue(model.connectionImmediate);
     const blockData = useAtomValue(model.blockAtom);
-    const finfo = useAtomValue(model.statFile);
+    const loadableFileInfo = useAtomValue(model.loadableFileInfo);
+    const finfo = loadableFileInfo.state === "hasData" ? loadableFileInfo.data : stableDirInfo;
     const dirPath = finfo?.path;
     const dirPathValue = dirPath ?? "";
+    const homeDir = useMemo(() => getApi().getHomeDir(), []);
+    const normalizedDirPath = useMemo(
+        () => normalizeDirectoryWatchPath(dirPathValue, homeDir),
+        [dirPathValue, homeDir]
+    );
     const setErrorMsg = useSetAtom(model.errorMsgAtom);
     const prefsMeta = (blockData?.meta?.[PreviewPrefsMetaKey] ?? {}) as Partial<PreviewPrefs>;
     const prefsMetaJson = useMemo(() => JSON.stringify(prefsMeta), [prefsMeta]);
@@ -1994,6 +2236,14 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         ...DefaultPreviewPrefs,
         ...prefsMeta,
     }));
+    useEffect(() => {
+        if (loadableFileInfo.state === "hasData") {
+            setStableDirInfo(loadableFileInfo.data);
+        }
+    }, [loadableFileInfo]);
+    useEffect(() => {
+        unfilteredDataRef.current = unfilteredData;
+    }, [unfilteredData]);
     const updatePrefs = useCallback((patch: Partial<PreviewPrefs>) => {
         setPrefs((prev) => ({ ...prev, ...patch }));
     }, []);
@@ -2005,6 +2255,13 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
 
     // Internal clipboard
     const [clipboard, setClipboard] = useState<FileClipboard | null>(null);
+    const [rootRefreshVersion, setRootRefreshVersion] = useState(0);
+    const [autoRefreshRequest, setAutoRefreshRequest] = useState<{ id: number; dirs: string[] }>({
+        id: 0,
+        dirs: [],
+    });
+    const queuedRefreshDirsRef = useRef<Set<string>>(new Set());
+    const queuedRefreshTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         model.refreshCallback = () => {
@@ -2014,6 +2271,65 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
             model.refreshCallback = null;
         };
     }, [setRefreshVersion]);
+
+    const flushQueuedDirRefreshes = useCallback(() => {
+        queuedRefreshTimerRef.current = null;
+        const changedDirs = Array.from(queuedRefreshDirsRef.current);
+        queuedRefreshDirsRef.current.clear();
+        if (changedDirs.length === 0) {
+            return;
+        }
+        const childDirSet = new Set<string>();
+        let refreshRoot = false;
+        for (const changedDir of changedDirs) {
+            if (changedDir === normalizedDirPath) {
+                refreshRoot = true;
+            } else {
+                childDirSet.add(changedDir);
+            }
+        }
+        if (refreshRoot) {
+            setRootRefreshVersion((v) => v + 1);
+        }
+        const childDirs = Array.from(childDirSet);
+        if (childDirs.length > 0) {
+            setAutoRefreshRequest((prev) => ({ id: prev.id + 1, dirs: childDirs }));
+        }
+    }, [normalizedDirPath]);
+
+    const queueDirRefresh = useCallback(
+        (changedDir?: string) => {
+            const normalizedChangedDir = normalizeDirectoryWatchPath(changedDir, homeDir);
+            if (!normalizedChangedDir) {
+                setRootRefreshVersion((v) => v + 1);
+                return;
+            }
+            queuedRefreshDirsRef.current.add(normalizedChangedDir);
+            if (queuedRefreshTimerRef.current != null) {
+                return;
+            }
+            queuedRefreshTimerRef.current = window.setTimeout(flushQueuedDirRefreshes, AutoRefreshCoalesceMs);
+        },
+        [flushQueuedDirRefreshes, homeDir]
+    );
+
+    useEffect(() => {
+        return () => {
+            if (queuedRefreshTimerRef.current != null) {
+                window.clearTimeout(queuedRefreshTimerRef.current);
+                queuedRefreshTimerRef.current = null;
+            }
+            queuedRefreshDirsRef.current.clear();
+        };
+    }, []);
+
+    useEffect(() => {
+        if (queuedRefreshTimerRef.current != null) {
+            window.clearTimeout(queuedRefreshTimerRef.current);
+            queuedRefreshTimerRef.current = null;
+        }
+        queuedRefreshDirsRef.current.clear();
+    }, [dirPath]);
 
     useEffect(() => {
         const next = { ...DefaultPreviewPrefs, ...prefsMeta };
@@ -2031,27 +2347,29 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         if (!blockId) return;
         if (prefsJson === prefsMetaJson) return;
         fireAndForget(() =>
-            ObjectService.UpdateObjectMeta(WOS.makeORef("block", blockId), {
-                [PreviewPrefsMetaKey]: prefs,
-            })
+            ObjectService.UpdateObjectMeta(
+                WOS.makeORef("block", blockId),
+                {
+                    [PreviewPrefsMetaKey]: prefs,
+                } as MetaType
+            )
         );
     }, [prefsJson, prefsMetaJson, blockData?.oid]);
 
     // Subscribe to directory watch events for automatic refresh
     useEffect(() => {
         const blockId = blockData?.oid;
-        if (!dirPath || !blockId || conn) {
-            // Only watch local directories for now
+        if (!dirPath || !blockId) {
             return;
         }
+        const dirWatchRpcOpts = isLocalConnName(connection) ? undefined : { route: makeConnRoute(connection) };
 
-        // Subscribe to directory watch for top-level dir
         fireAndForget(async () => {
             try {
                 await RpcApi.DirWatchSubscribeCommand(TabRpcClient, {
                     dirpath: dirPath,
                     blockid: blockId,
-                });
+                }, dirWatchRpcOpts);
             } catch (e) {
                 console.log("Failed to subscribe to directory watch:", e);
             }
@@ -2061,61 +2379,97 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         const unsub = waveEventSubscribe({
             eventType: "dirwatch",
             scope: `block:${blockId}`,
-            handler: () => {
-                setRefreshVersion((v) => v + 1);
+            handler: (event) => {
+                const data = event.data as { dirpath?: string; event?: string; name?: string } | null;
+                if (isInternalDirectoryProbeName(data?.name)) {
+                    return;
+                }
+                if (shouldIgnoreVolumesDirectoryWatchEvent(dirPath, data?.dirpath, data?.name)) {
+                    return;
+                }
+                if (!shouldRefreshDirectoryForEvent(data?.event, prefs.sortMode)) {
+                    return;
+                }
+                queueDirRefresh(data?.dirpath);
             },
         });
 
         return () => {
             unsub();
-            // Unsubscribe from directory watch
             fireAndForget(async () => {
                 try {
                     await RpcApi.DirWatchUnsubscribeCommand(TabRpcClient, {
                         dirpath: dirPath,
                         blockid: blockId,
-                    });
+                    }, dirWatchRpcOpts);
                 } catch (e) {
                     // Ignore errors on cleanup
                 }
             });
         };
-    }, [dirPath, blockData?.oid, conn, setRefreshVersion]);
+    }, [connection, dirPath, blockData?.oid, prefs.sortMode, queueDirRefresh]);
+
+    const readRootDirectoryEntries = useCallback(async (): Promise<FileInfo[]> => {
+        if (!dirPath) {
+            return [];
+        }
+        const file = await RpcApi.FileReadCommand(
+            TabRpcClient,
+            {
+                info: {
+                    path: await model.formatRemoteUri(dirPath, globalStore.get),
+                },
+            },
+            null
+        );
+        return filterInternalProbeEntries(file.entries ?? []);
+    }, [dirPath, model]);
 
     useEffect(
         () =>
             fireAndForget(async () => {
-                let entries: FileInfo[];
+                let entries: FileInfo[] = [];
                 try {
-                    const file = await RpcApi.FileReadCommand(
-                        TabRpcClient,
-                        {
-                            info: {
-                                path: await model.formatRemoteUri(dirPath, globalStore.get),
-                            },
-                        },
-                        null
-                    );
-                    entries = file.entries ?? [];
-                    if (file?.info && file.info.dir && file.info?.path !== file.info?.dir) {
-                        entries.unshift({
-                            name: "..",
-                            path: file?.info?.dir,
-                            isdir: true,
-                            modtime: new Date().getTime(),
-                            mimetype: "directory",
-                        });
-                    }
+                    entries = await readRootDirectoryEntries();
                 } catch (e) {
                     setErrorMsg({
-                        status: "Cannot Read Directory",
+                        status: "无法读取目录",
                         text: `${e}`,
                     });
                 }
                 setUnfilteredData(entries);
             }),
-        [conn, dirPath, refreshVersion]
+        [conn, dirPath, refreshVersion, rootRefreshVersion, readRootDirectoryEntries]
     );
+
+    useEffect(() => {
+        if (!dirPath) {
+            return;
+        }
+        const intervalId = window.setInterval(() => {
+            if (rootReconcileInFlightRef.current) {
+                return;
+            }
+            rootReconcileInFlightRef.current = true;
+            fireAndForget(async () => {
+                try {
+                    const nextEntries = await readRootDirectoryEntries();
+                    const nextSignature = makeDirectoryEntriesSignature(nextEntries);
+                    const prevSignature = makeDirectoryEntriesSignature(unfilteredDataRef.current);
+                    if (nextSignature !== prevSignature) {
+                        setUnfilteredData(nextEntries);
+                    }
+                } catch {
+                    // keep existing data; manual refresh/error overlay still handles hard failures
+                } finally {
+                    rootReconcileInFlightRef.current = false;
+                }
+            });
+        }, DirectoryReconcileFallbackIntervalMs);
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [dirPath, readRootDirectoryEntries]);
 
     const filteredData = useMemo(
         () =>
@@ -2124,7 +2478,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                     console.log("fileInfo.name is null", fileInfo);
                     return false;
                 }
-                if (!showHiddenFiles && fileInfo.name.startsWith(".") && fileInfo.name != "..") {
+                if (!showHiddenFiles && fileInfo.name.startsWith(".")) {
                     return false;
                 }
                 return true;
@@ -2154,19 +2508,19 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                 let errorMsg: ErrorMsg;
                 if (allowRetry) {
                     errorMsg = {
-                        status: "Confirm Overwrite File(s)",
-                        text: "This copy operation will overwrite an existing file. Would you like to continue?",
+                        status: "确认覆盖文件",
+                        text: "本次复制会覆盖已存在的文件。确定继续吗？",
                         level: "warning",
                         buttons: [
                             {
-                                text: "Delete Then Copy",
+                                text: "覆盖后复制",
                                 onClick: async () => {
                                     data.opts.overwrite = true;
                                     await handleDropCopy(data, isDir);
                                 },
                             },
                             {
-                                text: "Sync",
+                                text: "合并同步",
                                 onClick: async () => {
                                     data.opts.merge = true;
                                     await handleDropCopy(data, isDir);
@@ -2176,7 +2530,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                     };
                 } else {
                     errorMsg = {
-                        status: "Copy Failed",
+                        status: "复制失败",
                         text: copyError,
                         level: "error",
                     };
@@ -2201,12 +2555,12 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                 let errorMsg: ErrorMsg;
                 if (allowRetry) {
                     errorMsg = {
-                        status: "Confirm Overwrite",
-                        text: "Target already exists. Overwrite it?",
+                        status: "确认覆盖",
+                        text: "目标已存在，是否覆盖？",
                         level: "warning",
                         buttons: [
                             {
-                                text: "Overwrite",
+                                text: "覆盖",
                                 onClick: async () => {
                                     data.opts.overwrite = true;
                                     await handleDropMove(data, isDir);
@@ -2216,7 +2570,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                     };
                 } else {
                     errorMsg = {
-                        status: "Move Failed",
+                        status: "移动失败",
                         text: moveError,
                         level: "error",
                     };
@@ -2240,7 +2594,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
             const data: CommandFileCopyData = {
                 srcuri: draggedFile.uri,
                 desturi,
-                opts,
+                opts: { ...opts, recursive: draggedFile.isDir },
             };
             await handleDropMove(data, draggedFile.isDir);
         },
@@ -2260,7 +2614,7 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                 const data: CommandFileCopyData = {
                     srcuri,
                     desturi,
-                    opts: { timeout: timeoutYear },
+                    opts: { timeout: timeoutYear, recursive: isDir },
                 };
                 if (cb.operation === "cut") {
                     await handleDropMove(data, isDir);
@@ -2273,6 +2627,70 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
             }
         },
         [model.formatRemoteUri, handleDropMove, handleDropCopy]
+    );
+
+    const pasteFromClipboard = useCallback(
+        async (targetDir: string, e?: ClipboardEvent): Promise<boolean> => {
+            if (!targetDir) {
+                return false;
+            }
+            if (clipboard) {
+                await handlePaste(clipboard, targetDir);
+                return true;
+            }
+
+            const files = await getApi().readClipboardFiles();
+            if (files.length > 0) {
+                const errors: string[] = [];
+                for (const rawSrcPath of files) {
+                    const srcPath = normalizeClipboardFsPath(rawSrcPath);
+                    const name = srcPath.split("/").filter(Boolean).pop();
+                    if (!name) {
+                        errors.push(`无法确定剪贴板项目名称：${rawSrcPath}`);
+                        continue;
+                    }
+                    const desturi = await model.formatRemoteUri(targetDir + "/" + name, globalStore.get);
+                    try {
+                        await RpcApi.FileCopyCommand(TabRpcClient, {
+                            srcuri: "wsh://local" + srcPath,
+                            desturi,
+                            opts: { timeout: 31536000000, recursive: true },
+                        });
+                    } catch (err) {
+                        console.warn("Paste from system clipboard failed:", err);
+                        errors.push(`${name}: ${err}`);
+                    }
+                }
+                if (errors.length > 0) {
+                    setErrorMsg({
+                        status: "粘贴失败",
+                        text: errors.join("\n"),
+                        level: "error",
+                    });
+                }
+                model.refreshCallback?.();
+                return true;
+            }
+
+            const clipboardItems = await extractAllClipboardData(e);
+            const images = clipboardItems.flatMap((item) => (item.image ? [item.image] : []));
+            if (images.length === 0) {
+                return false;
+            }
+
+            for (const [index, image] of images.entries()) {
+                const fileName = makeClipboardImageName(image, index);
+                const filePath = await model.formatRemoteUri(targetDir + "/" + fileName, globalStore.get);
+                const arrayBuffer = await image.arrayBuffer();
+                await RpcApi.FileWriteCommand(TabRpcClient, {
+                    info: { path: filePath },
+                    data64: base64.fromByteArray(new Uint8Array(arrayBuffer)),
+                });
+            }
+            model.refreshCallback?.();
+            return true;
+        },
+        [clipboard, handlePaste, model, setErrorMsg]
     );
 
     // Handle external file drop (from Finder)
@@ -2353,39 +2771,28 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
         (e: any) => {
             e.preventDefault();
             e.stopPropagation();
-            const menu: ContextMenuItem[] = [
-                {
-                    label: "New File",
-                    click: () => setNewItemRequest({ isDir: false, parentPath: dirPath }),
-                },
-                {
-                    label: "New Folder",
-                    click: () => setNewItemRequest({ isDir: true, parentPath: dirPath }),
-                },
-                {
-                    type: "separator",
-                },
-            ];
-            if (clipboard) {
-                menu.push({
-                    label: `Paste (${clipboard.paths.length} item${clipboard.paths.length > 1 ? "s" : ""})`,
-                    click: () => fireAndForget(() => handlePaste(clipboard, dirPathValue)),
-                });
-                menu.push({ type: "separator" });
-            }
-            // Reveal in Finder (local only)
-            if (!conn && dirPath) {
-                menu.push({
-                    label: "Reveal in Finder",
-                    click: () => getApi().showItemInFolder(dirPath),
-                });
-                menu.push({ type: "separator" });
-            }
-            addOpenMenuItems(menu, conn, finfo);
-
-            ContextMenuModel.showContextMenu(menu, e);
+            if (finfo == null) return;
+            const menuEntries = buildDirectoryBackgroundMenuEntries({
+                conn,
+                finfo,
+                locale: DirectoryMenuLocale,
+                clipboardCount: clipboard?.paths.length,
+            });
+            const menu = buildContextMenuItems(menuEntries, (id) => {
+                switch (id) {
+                    case "new-file":
+                        return () => setNewItemRequest({ isDir: false, parentPath: dirPath });
+                    case "new-folder":
+                        return () => setNewItemRequest({ isDir: true, parentPath: dirPath });
+                    case "paste":
+                        return () => fireAndForget(() => pasteFromClipboard(dirPathValue));
+                    default:
+                        return getOpenMenuActionHandler(id as OpenMenuActionId, conn, finfo);
+                }
+            });
+            ContextMenuModel.showContextMenu(normalizeMenuSeparators(menu), e);
         },
-        [clipboard, conn, dirPath, dirPathValue, finfo, handlePaste]
+        [clipboard, conn, dirPathValue, finfo, pasteFromClipboard]
     );
 
     return (
@@ -2414,10 +2821,12 @@ function DirectoryPreview({ model }: DirectoryPreviewProps) {
                     clipboard={clipboard}
                     setClipboard={setClipboard}
                     onPaste={handlePaste}
+                    onPasteFromClipboard={pasteFromClipboard}
                     dirPath={dirPathValue}
                     onExternalFileDrop={onExternalFileDrop}
                     newItemRequest={newItemRequest}
                     onNewItemHandled={clearNewItemRequest}
+                    autoRefreshRequest={autoRefreshRequest}
                 />
             </div>
             {entryManagerProps && (

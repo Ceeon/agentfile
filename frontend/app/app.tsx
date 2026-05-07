@@ -9,7 +9,7 @@ import { ContextMenuModel } from "@/store/contextmenu";
 import {
     atoms,
     clearTabIndicatorFromFocus,
-    createBlock,
+    getApi,
     getSettingsPrefixAtom,
     getTabIndicatorAtom,
     globalStore,
@@ -108,25 +108,20 @@ async function handleContextMenu(e: React.MouseEvent<HTMLDivElement>) {
     }
     let menu: ContextMenuItem[] = [];
     if (canCut) {
-        menu.push({ label: "Cut", role: "cut" });
+        menu.push({ label: "剪切", role: "cut" });
     }
     if (canCopy) {
-        menu.push({ label: "Copy", role: "copy" });
+        menu.push({ label: "复制", role: "copy" });
     }
     if (canPaste) {
-        menu.push({ label: "Paste", role: "paste" });
+        menu.push({ label: "粘贴", role: "paste" });
     }
     if (clipboardURL) {
         menu.push({ type: "separator" });
         menu.push({
-            label: "Open Clipboard URL (" + clipboardURL.hostname + ")",
+            label: "用外部浏览器打开剪贴板链接（" + clipboardURL.hostname + "）",
             click: () => {
-                createBlock({
-                    meta: {
-                        view: "web",
-                        url: clipboardURL.toString(),
-                    },
-                });
+                getApi().openExternal(clipboardURL.toString());
             },
         });
     }
@@ -295,7 +290,7 @@ const FlashError = () => {
                     onClick={() => copyError(err.id)}
                     onMouseEnter={() => setHoveredId(err.id)}
                     onMouseLeave={() => setHoveredId(null)}
-                    title="Click to Copy Error Message"
+                    title="点击复制错误信息"
                 >
                     <div className="flash-error-scroll">
                         {err.title != null ? <div className="flash-error-title">{err.title}</div> : null}
@@ -319,7 +314,7 @@ const AppInner = () => {
         return (
             <div className="flex flex-col w-full h-full">
                 <AppBackground />
-                <CenteredDiv>invalid configuration, client or window was not loaded</CenteredDiv>
+                <CenteredDiv>配置无效，客户端或窗口数据未能加载</CenteredDiv>
             </div>
         );
     }

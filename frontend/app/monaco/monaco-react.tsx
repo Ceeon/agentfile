@@ -34,6 +34,11 @@ export function MonacoCodeEditor({
     const editorRef = useRef<MonacoTypes.editor.IStandaloneCodeEditor | null>(null);
     const onUnmountRef = useRef<(() => void) | null>(null);
     const applyingFromProps = useRef(false);
+    const onChangeRef = useRef<typeof onChange>(onChange);
+
+    useEffect(() => {
+        onChangeRef.current = onChange;
+    }, [onChange]);
 
     useEffect(() => {
         loadMonaco();
@@ -53,7 +58,7 @@ export function MonacoCodeEditor({
 
         const sub = model.onDidChangeContent(() => {
             if (applyingFromProps.current) return;
-            onChange?.(model.getValue());
+            onChangeRef.current?.(model.getValue());
         });
 
         if (onMount) {
@@ -82,9 +87,37 @@ export function MonacoCodeEditor({
         const current = model.getValue();
         if (current === text) return;
 
+        const savedViewState = editor.saveViewState();
+        const savedScrollTop = editor.getScrollTop();
+        const savedScrollLeft = editor.getScrollLeft();
+        const savedSelections = editor.getSelections();
+        const savedPosition = editor.getPosition();
         applyingFromProps.current = true;
         model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => null);
         applyingFromProps.current = false;
+        window.requestAnimationFrame(() => {
+            if (editorRef.current !== editor || editor.getModel() == null) {
+                return;
+            }
+            if (savedViewState != null) {
+                editor.restoreViewState(savedViewState);
+            }
+            if (savedSelections != null && savedSelections.length > 0) {
+                editor.setSelections(
+                    savedSelections.map((selection) => {
+                        const validatedRange = model.validateRange(selection);
+                        return monaco.Selection.fromPositions(
+                            validatedRange.getStartPosition(),
+                            validatedRange.getEndPosition()
+                        );
+                    })
+                );
+            } else if (savedPosition != null) {
+                editor.setPosition(model.validatePosition(savedPosition));
+            }
+            editor.setScrollTop(savedScrollTop);
+            editor.setScrollLeft(savedScrollLeft);
+        });
     }, [text]);
 
     // Keep options in sync

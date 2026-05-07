@@ -125,7 +125,7 @@ function getReconnectItem(
         status: "connected",
         icon: "arrow-right-arrow-left",
         iconColor: "var(--grey-text-color)",
-        label: `Reconnect to ${connStatus.connection}`,
+        label: `重新连接到 ${connStatus.connection}`,
         value: "",
         onSelect: async (_: string) => {
             const prtn = RpcApi.ConnConnectCommand(
@@ -171,7 +171,7 @@ function getLocalSuggestions(
         return null;
     }
     const localSuggestions: SuggestionConnectionScope = {
-        headerText: "Local",
+        headerText: "本地",
         items: sortedSuggestionItems,
     };
     return localSuggestions;
@@ -192,7 +192,7 @@ function getRemoteSuggestions(
         return null;
     }
     const remoteSuggestions: SuggestionConnectionScope = {
-        headerText: "Remote",
+        headerText: "远程",
         items: sortedSuggestionItems,
     };
     return remoteSuggestions;
@@ -213,7 +213,7 @@ function getDisconnectItem(
         status: "connected",
         icon: "xmark",
         iconColor: "var(--grey-text-color)",
-        label: `Disconnect ${connStatus.connection}`,
+        label: `断开 ${connStatus.connection}`,
         value: "",
         onSelect: async (_: string) => {
             const prtn = RpcApi.ConnDisconnectCommand(TabRpcClient, connection, { timeout: 60000 });
@@ -234,8 +234,8 @@ function getConnectionsEditItem(
         status: "disconnected",
         icon: "gear",
         iconColor: "var(--grey-text-color)",
-        value: "Edit Connections",
-        label: "Edit Connections",
+        value: "编辑连接",
+        label: "编辑连接",
         onSelect: () => {
             util.fireAndForget(async () => {
                 globalStore.set(changeConnModalAtom, false);
@@ -482,7 +482,7 @@ const ChangeConnectionBlockModal = React.memo(
                 onKeyDown={(e) => keyutil.keydownWrapper(handleTypeAheadKeyDown)(e)}
                 onChange={(current: string) => setConnSelected(current)}
                 value={connSelected}
-                label="Connect to (username@host)..."
+                label="连接到（username@host）..."
                 onClickBackdrop={() => globalStore.set(changeConnModalAtom, false)}
             />
         );

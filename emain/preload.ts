@@ -1,7 +1,7 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { contextBridge, ipcRenderer, Rectangle, WebviewTag } from "electron";
+import { contextBridge, ipcRenderer, Rectangle } from "electron";
 
 // update type in custom.d.ts (ElectronApi type)
 contextBridge.exposeInMainWorld("api", {
@@ -15,11 +15,12 @@ contextBridge.exposeInMainWorld("api", {
     getConfigDir: () => ipcRenderer.sendSync("get-config-dir"),
     getHomeDir: () => ipcRenderer.sendSync("get-home-dir"),
     getAboutModalDetails: () => ipcRenderer.sendSync("get-about-modal-details"),
-    getWebviewPreload: () => ipcRenderer.sendSync("get-webview-preload"),
     getZoomFactor: () => ipcRenderer.sendSync("get-zoom-factor"),
     openNewWindow: () => ipcRenderer.send("open-new-window"),
+    openFileInNewTab: (filePath: string, connection?: string) =>
+        ipcRenderer.send("open-file-in-new-tab", { filePath, connection }),
+    registerGlobalWebviewKeys: (_keys: string[]) => {},
     showWorkspaceAppMenu: (workspaceId) => ipcRenderer.send("workspace-appmenu-show", workspaceId),
-    showBuilderAppMenu: (builderId) => ipcRenderer.send("builder-appmenu-show", builderId),
     showContextMenu: (workspaceId, menu) => ipcRenderer.send("contextmenu-show", workspaceId, menu),
     onContextMenuClick: (callback) => ipcRenderer.on("contextmenu-click", (_event, id) => callback(id)),
     downloadFile: (filePath) => ipcRenderer.send("download", { filePath }),
@@ -40,10 +41,10 @@ contextBridge.exposeInMainWorld("api", {
     getUpdaterChannel: () => ipcRenderer.sendSync("get-updater-channel"),
     installAppUpdate: () => ipcRenderer.send("install-app-update"),
     onMenuItemAbout: (callback) => ipcRenderer.on("menu-item-about", callback),
+    onMenuItemSettings: (callback) => ipcRenderer.on("menu-item-settings", callback),
+    onMenuItemNewFolderWindow: (callback) => ipcRenderer.on("menu-item-new-folder-window", callback),
     updateWindowControlsOverlay: (rect) => ipcRenderer.send("update-window-controls-overlay", rect),
     onReinjectKey: (callback) => ipcRenderer.on("reinject-key", (_event, waveEvent) => callback(waveEvent)),
-    setWebviewFocus: (focused: number) => ipcRenderer.send("webview-focus", focused),
-    registerGlobalWebviewKeys: (keys) => ipcRenderer.send("register-global-webview-keys", keys),
     onControlShiftStateUpdate: (callback) =>
         ipcRenderer.on("control-shift-state-update", (_event, state) => callback(state)),
     createWorkspace: () => ipcRenderer.send("create-workspace"),
@@ -53,31 +54,33 @@ contextBridge.exposeInMainWorld("api", {
     createTab: () => ipcRenderer.send("create-tab"),
     closeTab: (workspaceId, tabId) => ipcRenderer.send("close-tab", workspaceId, tabId),
     setWindowInitStatus: (status) => ipcRenderer.send("set-window-init-status", status),
-    onWaveInit: (callback) => ipcRenderer.on("wave-init", (_event, initOpts) => callback(initOpts)),
-    onBuilderInit: (callback) => ipcRenderer.on("builder-init", (_event, initOpts) => callback(initOpts)),
+    onWaveInit: (callback) => {
+        const listener = (_event, initOpts) => callback(initOpts);
+        ipcRenderer.on("wave-init", listener);
+        return () => ipcRenderer.removeListener("wave-init", listener);
+    },
+    onOpenFileInCurrentWindow: (callback) => {
+        const listener = (_event, request) => callback(request);
+        ipcRenderer.on("open-file-in-current-window", listener);
+        return () => ipcRenderer.removeListener("open-file-in-current-window", listener);
+    },
     sendLog: (log) => ipcRenderer.send("fe-log", log),
     onQuicklook: (filePath: string) => ipcRenderer.send("quicklook", filePath),
     openNativePath: (filePath: string) => ipcRenderer.send("open-native-path", filePath),
+    openExternalTerminal: (cwd: string, connection?: string) => ipcRenderer.send("open-external-terminal", { cwd, connection }),
+    openDirectoryTarget: (target: DirectoryOpenTarget, cwd: string, connection?: string) =>
+        ipcRenderer.send("open-directory-target", { target, cwd, connection }),
+    listDirectoryOpenTargets: (connection?: string) => ipcRenderer.invoke("list-directory-open-targets", connection),
+    listExternalTerminalApps: () => ipcRenderer.invoke("list-external-terminal-apps"),
+    openFileInBrowser: (filePath: string) => ipcRenderer.send("open-file-in-browser", filePath),
+    showItemInFolder: (filePath: string) => ipcRenderer.send("show-item-in-folder", filePath),
+    writeClipboardText: (text: string) => ipcRenderer.invoke("write-clipboard-text", text),
+    writeClipboardHtml: (html: string, text?: string) => ipcRenderer.invoke("write-clipboard-html", { html, text }),
     captureScreenshot: (rect: Rectangle) => ipcRenderer.invoke("capture-screenshot", rect),
     setKeyboardChordMode: () => ipcRenderer.send("set-keyboard-chord-mode"),
-    clearWebviewStorage: (webContentsId: number) => ipcRenderer.invoke("clear-webview-storage", webContentsId),
-    setWaveAIOpen: (isOpen: boolean) => ipcRenderer.send("set-waveai-open", isOpen),
-    closeBuilderWindow: () => ipcRenderer.send("close-builder-window"),
     incrementTermCommands: () => ipcRenderer.send("increment-term-commands"),
     nativePaste: () => ipcRenderer.send("native-paste"),
-    openBuilder: (appId?: string) => ipcRenderer.send("open-builder", appId),
-    setBuilderWindowAppId: (appId: string) => ipcRenderer.send("set-builder-window-appid", appId),
     doRefresh: () => ipcRenderer.send("do-refresh"),
-});
-
-// Custom event for "new-window"
-ipcRenderer.on("webview-new-window", (e, webContentsId, details) => {
-    const event = new CustomEvent("new-window", { detail: details });
-    document.getElementById("webview").dispatchEvent(event);
-});
-
-ipcRenderer.on("webcontentsid-from-blockid", (e, blockId, responseCh) => {
-    const webviewElem: WebviewTag = document.querySelector("div[data-blockid='" + blockId + "'] webview");
-    const wcId = webviewElem?.dataset?.webcontentsid;
-    ipcRenderer.send(responseCh, wcId);
+    readClipboardFiles: () => ipcRenderer.invoke("read-clipboard-files"),
+    readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),
 });

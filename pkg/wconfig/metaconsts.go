@@ -10,6 +10,7 @@ const (
 	ConfigKey_AppGlobalHotkey                = "app:globalhotkey"
 	ConfigKey_AppDismissArchitectureWarning  = "app:dismissarchitecturewarning"
 	ConfigKey_AppDefaultNewBlock             = "app:defaultnewblock"
+	ConfigKey_AppExternalTerminal            = "app:externalterminal"
 	ConfigKey_AppShowOverlayBlockNums        = "app:showoverlayblocknums"
 	ConfigKey_AppCtrlVPaste                  = "app:ctrlvpaste"
 	ConfigKey_AppConfirmQuit                 = "app:confirmquit"
@@ -73,6 +74,7 @@ const (
 	ConfigKey_MarkdownFixedFontSize          = "markdown:fixedfontsize"
 
 	ConfigKey_PreviewShowHiddenFiles         = "preview:showhiddenfiles"
+	ConfigKey_PreviewBookmarks               = "preview:bookmarks"
 
 	ConfigKey_TabPreset                      = "tab:preset"
 

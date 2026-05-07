@@ -4,7 +4,13 @@
 import { CopyButton } from "@/app/element/copybutton";
 import { createContentBlockPlugin } from "@/app/element/markdown-contentblock-plugin";
 import {
+    DefaultAppleStyleSettings,
+    formatMarkdownFrontmatterValue,
     MarkdownContentBlockType,
+    parseMarkdownFrontmatter,
+    getMarkdownRenderProfile,
+    type MarkdownRenderProfile,
+    preprocessMarkdown,
     resolveRemoteFile,
     resolveSrcSet,
     transformBlocks,
@@ -21,7 +27,9 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import RemarkFlexibleToc, { TocItem } from "remark-flexible-toc";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import React from "react";
 import { openLink } from "../store/global";
 import { IconButton } from "./iconbutton";
 import "./markdown.scss";
@@ -97,7 +105,7 @@ const Mermaid = ({ chart }: { chart: string }) => {
                 setIsLoading(false);
             } catch (err) {
                 console.error("Error rendering mermaid diagram:", err);
-                setError(`Failed to render diagram: ${err.message || err}`);
+                setError(`渲染图表失败：${err.message || err}`);
                 setIsLoading(false);
             }
         };
@@ -109,10 +117,10 @@ const Mermaid = ({ chart }: { chart: string }) => {
         if (!ref.current) return;
 
         if (error) {
-            ref.current.textContent = `Error: ${error}`;
+            ref.current.textContent = `错误：${error}`;
             ref.current.className = "mermaid error";
         } else if (isLoading) {
-            ref.current.textContent = "Loading diagram...";
+            ref.current.textContent = "图表加载中...";
             ref.current.className = "mermaid";
         } else {
             ref.current.className = "mermaid";
@@ -166,7 +174,7 @@ const CodeBlock = ({ children, onClickExecute }: CodeBlockProps) => {
         <pre className="codeblock">
             {children}
             <div className="codeblock-actions">
-                <CopyButton onClick={handleCopy} title="Copy" />
+                <CopyButton onClick={handleCopy} title="复制" />
                 {onClickExecute && (
                     <IconButton
                         decl={{
@@ -179,6 +187,35 @@ const CodeBlock = ({ children, onClickExecute }: CodeBlockProps) => {
             </div>
         </pre>
     );
+};
+
+const Table = ({ props }: { props: React.TableHTMLAttributes<HTMLTableElement> }) => {
+    return (
+        <div className="table-wrapper">
+            <table {...props} />
+        </div>
+    );
+};
+
+function isImageOnlyParagraph(node: any): boolean {
+    if (!node || !Array.isArray(node.children) || node.children.length !== 1) {
+        return false;
+    }
+    const child = node.children[0];
+    return child?.type === "element" && (child.tagName === "img" || child.tagName === "picture");
+}
+
+const Paragraph = ({
+    props,
+    appleStyle,
+}: {
+    props: React.HTMLAttributes<HTMLParagraphElement> & { node?: any };
+    appleStyle: boolean;
+}) => {
+    if (appleStyle && isImageOnlyParagraph((props as any).node)) {
+        return <div className="paragraph apple-style-media-paragraph">{props.children}</div>;
+    }
+    return <div className="paragraph" {...props} />;
 };
 
 const MarkdownSource = ({
@@ -242,9 +279,11 @@ function WaveBlock(props: WaveBlockProps) {
 const MarkdownImg = ({
     props,
     resolveOpts,
+    appleStyle,
 }: {
     props: React.ImgHTMLAttributes<HTMLImageElement>;
     resolveOpts: MarkdownResolveOpts;
+    appleStyle: boolean;
 }) => {
     const [resolvedSrc, setResolvedSrc] = useState<string>(props.src);
     const [resolvedSrcSet, setResolvedSrcSet] = useState<string>(props.srcSet);
@@ -286,7 +325,11 @@ const MarkdownImg = ({
         return <span>{resolvedStr}</span>;
     }
     if (resolvedSrc != null) {
-        return <img {...props} src={resolvedSrc} srcSet={resolvedSrcSet} />;
+        const imageElem = <img {...props} src={resolvedSrc} srcSet={resolvedSrcSet} className={clsx(props.className)} />;
+        if (appleStyle) {
+            return <figure className="apple-style-figure">{imageElem}</figure>;
+        }
+        return imageElem;
     }
     return <span>[img]</span>;
 };
@@ -304,6 +347,36 @@ type MarkdownProps = {
     rehype?: boolean;
     fontSizeOverride?: number;
     fixedFontSizeOverride?: number;
+    frontmatterMode?: "inline" | "card" | "hidden";
+    scrollStateKey?: string;
+    initialScrollTop?: number;
+    onScrollTopChange?: (scrollTop: number) => void;
+};
+
+const FrontmatterCard = ({
+    frontmatter,
+    appleStyle,
+}: {
+    frontmatter: Record<string, unknown>;
+    appleStyle: boolean;
+}) => {
+    const entries = Object.entries(frontmatter).filter(([, value]) => value != null && formatMarkdownFrontmatterValue(value).trim());
+    if (entries.length === 0) {
+        return null;
+    }
+    return (
+        <section className={clsx("frontmatter-card", appleStyle && "frontmatter-card-apple-style")}>
+            <div className="frontmatter-card-header">文档信息</div>
+            <div className="frontmatter-card-body">
+                {entries.map(([key, value]) => (
+                    <div key={key} className="frontmatter-row">
+                        <div className="frontmatter-key">{key}</div>
+                        <div className="frontmatter-value">{formatMarkdownFrontmatterValue(value)}</div>
+                    </div>
+                ))}
+            </div>
+        </section>
+    );
 };
 
 const Markdown = ({
@@ -319,20 +392,58 @@ const Markdown = ({
     scrollable = true,
     rehype = true,
     onClickExecute,
+    frontmatterMode = "inline",
+    scrollStateKey,
+    initialScrollTop,
+    onScrollTopChange,
 }: MarkdownProps) => {
     const textAtomValue = useAtomValueSafe<string>(textAtom);
     const tocRef = useRef<TocItem[]>([]);
     const showToc = useAtomValueSafe(showTocAtom) ?? false;
     const contentsOsRef = useRef<OverlayScrollbarsComponentRef>(null);
     const [focusedHeading, setFocusedHeading] = useState<string>(null);
+    const [renderProfile, setRenderProfile] = useState({
+        appleStyle: false,
+        appleStyleSettings: DefaultAppleStyleSettings,
+    } as MarkdownRenderProfile);
 
     // Ensure uniqueness of ids between MD preview instances.
     const [idPrefix] = useState<string>(crypto.randomUUID());
 
     text = textAtomValue ?? text ?? "";
-    const transformedOutput = transformBlocks(text);
+    const frontmatterResult = useMemo(() => parseMarkdownFrontmatter(text), [text]);
+    const markdownSource = frontmatterMode === "inline" ? text : frontmatterResult.body;
+    const processedText = preprocessMarkdown(markdownSource, renderProfile);
+    const transformedOutput = transformBlocks(processedText);
     const transformedText = transformedOutput.content;
     const contentBlocksMap = transformedOutput.blocks;
+    const appleStyle = renderProfile.appleStyle;
+    const renderedFrontmatter =
+        frontmatterMode === "card" && frontmatterResult.data != null ? (
+            <FrontmatterCard frontmatter={frontmatterResult.data} appleStyle={appleStyle} />
+        ) : null;
+
+    useEffect(() => {
+        let disposed = false;
+        if (resolveOpts == null) {
+            setRenderProfile({ appleStyle: false, appleStyleSettings: DefaultAppleStyleSettings });
+            return;
+        }
+        getMarkdownRenderProfile(resolveOpts)
+            .then((profile) => {
+                if (!disposed) {
+                    setRenderProfile(profile);
+                }
+            })
+            .catch(() => {
+                if (!disposed) {
+                    setRenderProfile({ appleStyle: false, appleStyleSettings: DefaultAppleStyleSettings });
+                }
+            });
+        return () => {
+            disposed = true;
+        };
+    }, [resolveOpts?.baseDir, resolveOpts?.connName]);
 
     useEffect(() => {
         if (focusedHeading && contentsOsRef.current && contentsOsRef.current.osInstance()) {
@@ -347,26 +458,66 @@ const Markdown = ({
         }
     }, [focusedHeading]);
 
-    const markdownComponents: Partial<Components> = {
+    useEffect(() => {
+        if (!scrollable || contentsOsRef.current == null) {
+            return;
+        }
+        const osInstance = contentsOsRef.current.osInstance();
+        if (osInstance == null) {
+            return;
+        }
+        const { viewport } = osInstance.elements();
+        const handleScroll = () => {
+            onScrollTopChange?.(viewport.scrollTop);
+        };
+        viewport.addEventListener("scroll", handleScroll);
+        handleScroll();
+        return () => {
+            viewport.removeEventListener("scroll", handleScroll);
+        };
+    }, [onScrollTopChange, scrollStateKey, scrollable]);
+
+    useEffect(() => {
+        if (!scrollable || contentsOsRef.current == null) {
+            return;
+        }
+        const targetScrollTop = Math.max(0, initialScrollTop ?? 0);
+        const rafId = window.requestAnimationFrame(() => {
+            const osInstance = contentsOsRef.current?.osInstance();
+            const viewport = osInstance?.elements().viewport;
+            if (viewport != null) {
+                viewport.scrollTop = targetScrollTop;
+            }
+        });
+        return () => {
+            window.cancelAnimationFrame(rafId);
+        };
+    }, [initialScrollTop, scrollStateKey, scrollable]);
+
+    const markdownComponents: Partial<Components> & Record<string, any> = {
         a: (props: React.HTMLAttributes<HTMLAnchorElement>) => (
             <Link props={props} setFocusedHeading={setFocusedHeading} />
         ),
-        p: (props: React.HTMLAttributes<HTMLParagraphElement>) => <div className="paragraph" {...props} />,
+        p: (props: React.HTMLAttributes<HTMLParagraphElement>) => <Paragraph props={props as any} appleStyle={appleStyle} />,
         h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading props={props} hnum={1} />,
         h2: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading props={props} hnum={2} />,
         h3: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading props={props} hnum={3} />,
         h4: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading props={props} hnum={4} />,
         h5: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading props={props} hnum={5} />,
         h6: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading props={props} hnum={6} />,
-        img: (props: React.HTMLAttributes<HTMLImageElement>) => <MarkdownImg props={props} resolveOpts={resolveOpts} />,
+        img: (props: React.HTMLAttributes<HTMLImageElement>) => (
+            <MarkdownImg props={props} resolveOpts={resolveOpts} appleStyle={appleStyle} />
+        ),
         source: (props: React.HTMLAttributes<HTMLSourceElement>) => (
             <MarkdownSource props={props} resolveOpts={resolveOpts} />
         ),
+        table: (props: React.HTMLAttributes<HTMLTableElement>) => <Table props={props} />,
         code: Code,
         pre: (props: React.HTMLAttributes<HTMLPreElement>) => (
             <CodeBlock children={props.children} onClickExecute={onClickExecute} />
         ),
     };
+    markdownComponents["applespacer"] = () => <div className="apple-style-spacer" aria-hidden="true" />;
     markdownComponents["waveblock"] = (props: any) => <WaveBlock {...props} blockmap={contentBlocksMap} />;
     markdownComponents["mermaidblock"] = (props: any) => {
         const getTextContent = (children: any): string => {
@@ -441,6 +592,7 @@ const Markdown = ({
                         "picture",
                         "source",
                         "mermaidblock",
+                        "applespacer",
                     ],
                 }),
             () => rehypeSlug({ prefix: idPrefix }),
@@ -449,38 +601,36 @@ const Markdown = ({
     const remarkPlugins: any = [
         remarkMermaidToTag,
         remarkGfm,
+        remarkBreaks,
         [RemarkFlexibleToc, { tocRef: tocRef.current }],
         [createContentBlockPlugin, { blocks: contentBlocksMap }],
     ];
+
+    const renderedMarkdown = (
+        <>
+            {renderedFrontmatter}
+            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={markdownComponents}>
+                {transformedText}
+            </ReactMarkdown>
+        </>
+    );
 
     const ScrollableMarkdown = () => {
         return (
             <OverlayScrollbarsComponent
                 ref={contentsOsRef}
-                className={cn("content", contentClassName)}
+                className="content"
                 options={{ scrollbars: { autoHide: "leave" } }}
             >
-                <ReactMarkdown
-                    remarkPlugins={remarkPlugins}
-                    rehypePlugins={rehypePlugins}
-                    components={markdownComponents}
-                >
-                    {transformedText}
-                </ReactMarkdown>
+                <div className={cn("markdown-document", contentClassName)}>{renderedMarkdown}</div>
             </OverlayScrollbarsComponent>
         );
     };
 
     const NonScrollableMarkdown = () => {
         return (
-            <div className={cn("content non-scrollable", contentClassName)}>
-                <ReactMarkdown
-                    remarkPlugins={remarkPlugins}
-                    rehypePlugins={rehypePlugins}
-                    components={markdownComponents}
-                >
-                    {transformedText}
-                </ReactMarkdown>
+            <div className="content non-scrollable">
+                <div className={cn("markdown-document", contentClassName)}>{renderedMarkdown}</div>
             </div>
         );
     };
@@ -493,7 +643,7 @@ const Markdown = ({
         mergedStyle["--markdown-fixed-font-size"] = `${boundNumber(fixedFontSizeOverride, 6, 64)}px`;
     }
     return (
-        <div className={clsx("markdown", className)} style={mergedStyle}>
+        <div className={clsx("markdown", appleStyle && "markdown-apple-style", className)} style={mergedStyle}>
             {scrollable ? <ScrollableMarkdown /> : <NonScrollableMarkdown />}
             {toc && (
                 <OverlayScrollbarsComponent className="toc mt-1" options={{ scrollbars: { autoHide: "leave" } }}>

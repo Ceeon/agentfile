@@ -92,10 +92,12 @@ func GetConnNameFromContext(ctx context.Context) (string, error) {
 
 // ParseURI parses a connection URI and returns the connection type, host/path, and parameters.
 func ParseURI(uri string) (*Connection, error) {
-	split := strings.SplitN(uri, "://", 2)
+	var split []string
 	var scheme string
 	var rest string
-	if len(split) > 1 {
+	if strings.HasPrefix(uri, "//") {
+		rest = uri
+	} else if split = strings.SplitN(uri, "://", 2); len(split) > 1 {
 		scheme = split[0]
 		rest = strings.TrimPrefix(split[1], "//")
 	} else {
@@ -131,8 +133,8 @@ func ParseURI(uri string) (*Connection, error) {
 	if scheme == "" {
 		scheme = ConnectionTypeWsh
 		addPrecedingSlash = false
-		if len(rest) != len(uri) {
-			// This accounts for when the uri starts with "//", which would get trimmed in the first split.
+		if strings.HasPrefix(rest, "//") {
+			rest = strings.TrimPrefix(rest, "//")
 			parseWshPath()
 		} else if strings.HasPrefix(rest, "/~") {
 			host = wshrpc.LocalConnName

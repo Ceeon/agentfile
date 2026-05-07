@@ -57,6 +57,7 @@ type SettingsType struct {
 	AppGlobalHotkey               string `json:"app:globalhotkey,omitempty"`
 	AppDismissArchitectureWarning bool   `json:"app:dismissarchitecturewarning,omitempty"`
 	AppDefaultNewBlock            string `json:"app:defaultnewblock,omitempty"`
+	AppExternalTerminal           string `json:"app:externalterminal,omitempty"`
 	AppShowOverlayBlockNums       *bool  `json:"app:showoverlayblocknums,omitempty"`
 	AppCtrlVPaste                 *bool  `json:"app:ctrlvpaste,omitempty"`
 	AppConfirmQuit                *bool  `json:"app:confirmquit,omitempty"`
@@ -119,7 +120,8 @@ type SettingsType struct {
 	MarkdownFontSize      float64 `json:"markdown:fontsize,omitempty"`
 	MarkdownFixedFontSize float64 `json:"markdown:fixedfontsize,omitempty"`
 
-	PreviewShowHiddenFiles *bool `json:"preview:showhiddenfiles,omitempty"`
+	PreviewShowHiddenFiles *bool  `json:"preview:showhiddenfiles,omitempty"`
+	PreviewBookmarks       []any `json:"preview:bookmarks,omitempty"`
 
 	TabPreset string `json:"tab:preset,omitempty"`
 

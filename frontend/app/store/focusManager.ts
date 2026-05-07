@@ -1,5 +1,3 @@
-import { waveAIHasFocusWithin } from "@/app/aipanel/waveai-focus-utils";
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { atoms, getBlockComponentModel } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { focusedBlockId } from "@/util/focusutil";
@@ -33,12 +31,7 @@ export class FocusManager {
     }
 
     setWaveAIFocused(force: boolean = false) {
-        const isAlreadyFocused = globalStore.get(this.focusType) == "waveai";
-        if (!force && isAlreadyFocused) {
-            return;
-        }
-        globalStore.set(this.focusType, "waveai");
-        this.refocusNode();
+        this.setBlockFocus(force);
     }
 
     setBlockFocus(force: boolean = false) {
@@ -51,7 +44,7 @@ export class FocusManager {
     }
 
     waveAIFocusWithin(): boolean {
-        return waveAIHasFocusWithin();
+        return false;
     }
 
     nodeFocusWithin(): boolean {
@@ -63,19 +56,15 @@ export class FocusManager {
     }
 
     requestWaveAIFocus(): void {
-        globalStore.set(this.focusType, "waveai");
+        globalStore.set(this.focusType, "node");
     }
 
     getFocusType(): FocusStrType {
-        return globalStore.get(this.focusType);
+        const ftype = globalStore.get(this.focusType);
+        return ftype === "waveai" ? "node" : ftype;
     }
 
     refocusNode() {
-        const ftype = globalStore.get(this.focusType);
-        if (ftype == "waveai") {
-            WaveAIModel.getInstance().focusInput();
-            return;
-        }
         const layoutModel = getLayoutModelForStaticTab();
         const lnode = globalStore.get(layoutModel.focusedNode);
         if (lnode == null || lnode.data?.blockId == null) {

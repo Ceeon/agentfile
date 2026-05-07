@@ -19,7 +19,6 @@ import {
     shNavHandler,
 } from "./emain-util";
 import { ElectronWshClient } from "./emain-wsh";
-
 function handleWindowsMenuAccelerators(
     waveEvent: WaveKeyboardEvent,
     tabView: WaveTabView,
@@ -70,21 +69,6 @@ function handleWindowsMenuAccelerators(
         return true;
     }
 
-    for (let i = 1; i <= 9; i++) {
-        if (checkKeyPressed(waveEvent, `Alt:Ctrl:${i}`)) {
-            const workspaceNum = i - 1;
-            RpcApi.WorkspaceListCommand(ElectronWshClient).then((workspaceList) => {
-                if (workspaceList && workspaceNum < workspaceList.length) {
-                    const workspace = workspaceList[workspaceNum];
-                    if (waveWindow) {
-                        waveWindow.switchWorkspace(workspace.workspacedata.oid);
-                    }
-                }
-            });
-            return true;
-        }
-    }
-
     if (checkKeyPressed(waveEvent, "Alt:Shift:i")) {
         tabView.webContents.toggleDevTools();
         return true;
@@ -97,12 +81,13 @@ function computeBgColor(fullConfig: FullConfigType): string {
     const settings = fullConfig?.settings;
     const isTransparent = settings?.["window:transparent"] ?? false;
     const isBlur = !isTransparent && (settings?.["window:blur"] ?? false);
+    const baseBgColor = settings?.["window:bgcolor"] ?? "#222222";
     if (isTransparent) {
         return "#00000000";
     } else if (isBlur) {
         return "#00000000";
     } else {
-        return "#222222";
+        return baseBgColor;
     }
 }
 
@@ -115,7 +100,6 @@ export function getWaveTabViewByWebContentsId(webContentsId: number): WaveTabVie
 export class WaveTabView extends WebContentsView {
     waveWindowId: string; // this will be set for any tabviews that are initialized. (unset for the hot spare)
     isActiveTab: boolean;
-    isWaveAIOpen: boolean;
     private _waveTabId: string; // always set, WaveTabViews are unique per tab
     lastUsedTs: number; // ts milliseconds
     createdTs: number; // ts milliseconds
@@ -135,11 +119,9 @@ export class WaveTabView extends WebContentsView {
         super({
             webPreferences: {
                 preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
-                webviewTag: true,
             },
         });
         this.createdTs = Date.now();
-        this.isWaveAIOpen = false;
         this.savedInitOpts = null;
         this.initPromise = new Promise((resolve, _) => {
             this.initResolve = resolve;
@@ -314,12 +296,6 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
     tabView.waveTabId = tabId;
     tabView.webContents.on("will-navigate", shNavHandler);
     tabView.webContents.on("will-frame-navigate", shFrameNavHandler);
-    tabView.webContents.on("did-attach-webview", (event, wc) => {
-        wc.setWindowOpenHandler((details) => {
-            tabView.webContents.send("webview-new-window", wc.id, details);
-            return { action: "deny" };
-        });
-    });
     tabView.webContents.on("before-input-event", (e, input) => {
         const waveEvent = adaptFromElectronKeyEvent(input);
         // console.log("WIN bie", tabView.waveTabId.substring(0, 8), waveEvent.type, waveEvent.code);

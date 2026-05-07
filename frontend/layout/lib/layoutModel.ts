@@ -98,6 +98,10 @@ export class LayoutModel {
      */
     private processedActionIds: Set<string>;
     /**
+     * Guard flag to prevent concurrent execution of processPendingBackendActions.
+     */
+    private isProcessingBackendActions: boolean;
+    /**
      * The jotai getter that is used to read atom values.
      */
     getter: Getter;
@@ -260,6 +264,7 @@ export class LayoutModel {
         this.animationTimeS = atom(animationTimeS ?? DefaultAnimationTimeS);
         this.persistDebounceTimer = null;
         this.processedActionIds = new Set();
+        this.isProcessingBackendActions = false;
 
         this.waveObjectAtom = getLayoutStateAtomFromTab(tabAtom, getter);
 
@@ -384,27 +389,33 @@ export class LayoutModel {
     }
 
     private async processPendingBackendActions() {
-        const waveObj = this.getter(this.waveObjectAtom);
-        const actions = waveObj?.pendingbackendactions;
-        if (!actions?.length) return;
+        if (this.isProcessingBackendActions) return;
+        this.isProcessingBackendActions = true;
+        try {
+            const waveObj = this.getter(this.waveObjectAtom);
+            const actions = waveObj?.pendingbackendactions;
+            if (!actions?.length) return;
 
-        this.treeState.pendingBackendActions = undefined;
+            this.treeState.pendingBackendActions = undefined;
 
-        for (const action of actions) {
-            if (!action.actionid) {
-                console.warn("Dropping layout action without actionid:", action);
-                continue;
+            for (const action of actions) {
+                if (!action.actionid) {
+                    console.warn("Dropping layout action without actionid:", action);
+                    continue;
+                }
+                if (this.processedActionIds.has(action.actionid)) {
+                    continue;
+                }
+                this.processedActionIds.add(action.actionid);
+                await this.handleBackendAction(action);
             }
-            if (this.processedActionIds.has(action.actionid)) {
-                continue;
-            }
-            this.processedActionIds.add(action.actionid);
-            await this.handleBackendAction(action);
+
+            this.updateTree();
+            this.setter(this.localTreeStateAtom, { ...this.treeState });
+            this.persistToBackend();
+        } finally {
+            this.isProcessingBackendActions = false;
         }
-
-        this.updateTree();
-        this.setter(this.localTreeStateAtom, { ...this.treeState });
-        this.persistToBackend();
     }
 
     private async cleanupOrphanedBlocks() {
@@ -581,13 +592,19 @@ export class LayoutModel {
             const waveObj = this.getter(this.waveObjectAtom);
             if (!waveObj) return;
 
-            waveObj.rootnode = this.treeState.rootNode;
-            waveObj.focusednodeid = this.treeState.focusedNodeId;
-            waveObj.magnifiednodeid = this.treeState.magnifiedNodeId;
-            waveObj.leaforder = this.treeState.leafOrder;
-            waveObj.pendingbackendactions = this.treeState.pendingBackendActions;
+            // Deep clone to prevent shared references between treeState and persisted state.
+            // Without this, mutations to treeState.rootNode would silently affect the persisted
+            // waveObj, causing state corruption over time.
+            const updatedWaveObj = {
+                ...waveObj,
+                rootnode: structuredClone(this.treeState.rootNode),
+                focusednodeid: this.treeState.focusedNodeId,
+                magnifiednodeid: this.treeState.magnifiedNodeId,
+                leaforder: this.treeState.leafOrder ? [...this.treeState.leafOrder] : undefined,
+                pendingbackendactions: this.treeState.pendingBackendActions,
+            };
 
-            this.setter(this.waveObjectAtom, waveObj);
+            this.setter(this.waveObjectAtom, updatedWaveObj);
             this.persistDebounceTimer = null;
         }, 100);
     }
@@ -1389,7 +1406,10 @@ export class LayoutModel {
      * Callback that is invoked when the TileLayout container is being resized.
      */
     onContainerResize = () => {
-        this.updateTree();
+        // Only recalculate layout dimensions on resize, don't rebalance the tree.
+        // Rebalancing can modify the tree structure (collapsing single-child nodes, etc.)
+        // but those changes wouldn't be persisted, causing state inconsistency.
+        this.updateTree(false);
         this.setter(this.isContainerResizing, true);
         this.stopContainerResizing();
     };
@@ -1573,7 +1593,7 @@ function getLeafOrder(
         .sort((a, b) => {
             const treeKeyA = additionalProps[a.nodeid]?.treeKey;
             const treeKeyB = additionalProps[b.nodeid]?.treeKey;
-            if (!treeKeyA || !treeKeyB) return;
+            if (!treeKeyA || !treeKeyB) return 0;
             return treeKeyA.localeCompare(treeKeyB);
         });
 }

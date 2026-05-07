@@ -154,7 +154,7 @@ const AppsFloatingWindow = memo(
                             <i className="fa fa-solid fa-spinner fa-spin text-2xl text-muted"></i>
                         </div>
                     ) : apps.length === 0 ? (
-                        <div className="text-muted text-sm p-4 text-center">No local apps found</div>
+                        <div className="text-muted text-sm p-4 text-center">未找到本地应用</div>
                     ) : (
                         <div
                             className="grid gap-3"
@@ -228,58 +228,30 @@ const SettingsFloatingWindow = memo(
 
         if (!isOpen) return null;
 
+        const openWaveConfig = (file?: string) => {
+            const blockDef: BlockDef = {
+                meta: {
+                    view: "waveconfig",
+                    ...(file ? { file } : {}),
+                },
+            };
+            createBlock(blockDef, false, true);
+            onClose();
+        };
+
         const menuItems = [
             {
                 icon: "gear",
-                label: "Settings",
+                label: "设置",
                 onClick: () => {
-                    const blockDef: BlockDef = {
-                        meta: {
-                            view: "waveconfig",
-                        },
-                    };
-                    createBlock(blockDef, false, true);
-                    onClose();
-                },
-            },
-            {
-                icon: "lightbulb",
-                label: "Tips",
-                onClick: () => {
-                    const blockDef: BlockDef = {
-                        meta: {
-                            view: "tips",
-                        },
-                    };
-                    createBlock(blockDef, true, true);
-                    onClose();
+                    openWaveConfig();
                 },
             },
             {
                 icon: "lock",
-                label: "Secrets",
+                label: "密钥",
                 onClick: () => {
-                    const blockDef: BlockDef = {
-                        meta: {
-                            view: "waveconfig",
-                            file: "secrets",
-                        },
-                    };
-                    createBlock(blockDef, false, true);
-                    onClose();
-                },
-            },
-            {
-                icon: "circle-question",
-                label: "Help",
-                onClick: () => {
-                    const blockDef: BlockDef = {
-                        meta: {
-                            view: "help",
-                        },
-                    };
-                    createBlock(blockDef);
-                    onClose();
+                    openWaveConfig("secrets");
                 },
             },
         ];
@@ -319,7 +291,6 @@ const Widgets = memo(() => {
     const containerRef = useRef<HTMLDivElement>(null);
     const measurementRef = useRef<HTMLDivElement>(null);
 
-    const featureWaveAppBuilder = fullConfig?.settings?.["feature:waveappbuilder"] ?? false;
     const widgetsMap = fullConfig?.widgets ?? {};
     const filteredWidgets = hasCustomAIPresets
         ? widgetsMap
@@ -330,6 +301,7 @@ const Widgets = memo(() => {
     const appsButtonRef = useRef<HTMLDivElement>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const settingsButtonRef = useRef<HTMLDivElement>(null);
+    const showAppsButton = false;
 
     const checkModeNeeded = useCallback(() => {
         if (!containerRef.current || !measurementRef.current) return;
@@ -380,7 +352,7 @@ const Widgets = memo(() => {
         e.preventDefault();
         const menu: ContextMenuItem[] = [
             {
-                label: "Edit widgets.json",
+                label: "编辑 widgets.json",
                 click: () => {
                     fireAndForget(async () => {
                         const blockDef: BlockDef = {
@@ -413,13 +385,13 @@ const Widgets = memo(() => {
                         </div>
                         <div className="flex-grow" />
                         <div className="grid grid-cols-2 gap-0 w-full">
-                            {isDev() || featureWaveAppBuilder ? (
+                            {showAppsButton ? (
                                 <div
                                     ref={appsButtonRef}
                                     className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                     onClick={() => setIsAppsOpen(!isAppsOpen)}
                                 >
-                                    <Tooltip content="Local WaveApps" placement="left" disable={isAppsOpen}>
+                                    <Tooltip content="本地应用" placement="left" disable={isAppsOpen}>
                                         <div>
                                             <i className={makeIconClass("cube", true)}></i>
                                         </div>
@@ -431,7 +403,7 @@ const Widgets = memo(() => {
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={() => setIsSettingsOpen(!isSettingsOpen)}
                             >
-                                <Tooltip content="Settings & Help" placement="left" disable={isSettingsOpen}>
+                                <Tooltip content="设置" placement="left" disable={isSettingsOpen}>
                                     <div>
                                         <i className={makeIconClass("gear", true)}></i>
                                     </div>
@@ -445,20 +417,20 @@ const Widgets = memo(() => {
                             <Widget key={`widget-${idx}`} widget={data} mode={mode} />
                         ))}
                         <div className="flex-grow" />
-                        {isDev() || featureWaveAppBuilder ? (
+                        {showAppsButton ? (
                             <div
                                 ref={appsButtonRef}
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={() => setIsAppsOpen(!isAppsOpen)}
                             >
-                                <Tooltip content="Local WaveApps" placement="left" disable={isAppsOpen}>
+                                <Tooltip content="本地应用" placement="left" disable={isAppsOpen}>
                                     <div className="flex flex-col items-center w-full">
                                         <div>
                                             <i className={makeIconClass("cube", true)}></i>
                                         </div>
                                         {mode === "normal" && (
                                             <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                                                apps
+                                                应用
                                             </div>
                                         )}
                                     </div>
@@ -470,7 +442,7 @@ const Widgets = memo(() => {
                             className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
                         >
-                            <Tooltip content="Settings & Help" placement="left" disable={isSettingsOpen}>
+                            <Tooltip content="设置" placement="left" disable={isSettingsOpen}>
                                 <div>
                                     <i className={makeIconClass("gear", true)}></i>
                                 </div>
@@ -481,13 +453,13 @@ const Widgets = memo(() => {
                 {isDev() ? (
                     <div
                         className="flex justify-center items-center w-full py-1 text-accent text-[30px]"
-                        title="Running Wave Dev Build"
+                        title="当前运行的是 Agentfile 开发版"
                     >
                         <i className="fa fa-brands fa-dev fa-fw" />
                     </div>
                 ) : null}
             </div>
-            {(isDev() || featureWaveAppBuilder) && appsButtonRef.current && (
+            {showAppsButton && appsButtonRef.current && (
                 <AppsFloatingWindow
                     isOpen={isAppsOpen}
                     onClose={() => setIsAppsOpen(false)}
@@ -514,20 +486,20 @@ const Widgets = memo(() => {
                     <div>
                         <i className={makeIconClass("gear", true)}></i>
                     </div>
-                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">settings</div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">设置</div>
                 </div>
-                {isDev() ? (
+                {showAppsButton ? (
                     <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                         <div>
                             <i className={makeIconClass("cube", true)}></i>
                         </div>
-                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center">apps</div>
+                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center">应用</div>
                     </div>
                 ) : null}
                 {isDev() ? (
                     <div
                         className="flex justify-center items-center w-full py-1 text-accent text-[30px]"
-                        title="Running Wave Dev Build"
+                        title="当前运行的是 Agentfile 开发版"
                     >
                         <i className="fa fa-brands fa-dev fa-fw" />
                     </div>

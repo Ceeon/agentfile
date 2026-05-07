@@ -12,7 +12,7 @@ function defaultEditorOptions(): MonacoTypes.editor.IEditorOptions {
     const opts: MonacoTypes.editor.IEditorOptions = {
         automaticLayout: true,
         scrollBeyondLastLine: false,
-        fontSize: 12,
+        fontSize: 15,
         fontFamily: "Hack",
         smoothScrolling: true,
         scrollbar: {
@@ -36,17 +36,28 @@ interface CodeEditorProps {
     readonly: boolean;
     language?: string;
     fileName?: string;
+    fontSizeOverride?: number;
     onChange?: (text: string) => void;
     onMount?: (monacoPtr: MonacoTypes.editor.IStandaloneCodeEditor, monaco: typeof MonacoModule) => () => void;
 }
 
-export function CodeEditor({ blockId, text, language, fileName, readonly, onChange, onMount }: CodeEditorProps) {
+export function CodeEditor({
+    blockId,
+    text,
+    language,
+    fileName,
+    readonly,
+    fontSizeOverride,
+    onChange,
+    onMount,
+}: CodeEditorProps) {
     const divRef = useRef<HTMLDivElement>(null);
     const unmountRef = useRef<() => void>(null);
     const minimapEnabled = useOverrideConfigAtom(blockId, "editor:minimapenabled") ?? false;
     const stickyScrollEnabled = useOverrideConfigAtom(blockId, "editor:stickyscrollenabled") ?? false;
     const wordWrap = useOverrideConfigAtom(blockId, "editor:wordwrap") ?? true;
-    const fontSize = boundNumber(useOverrideConfigAtom(blockId, "editor:fontsize"), 6, 64);
+    const configuredFontSize = boundNumber(useOverrideConfigAtom(blockId, "editor:fontsize"), 6, 64);
+    const fontSize = boundNumber(fontSizeOverride ?? configuredFontSize, 6, 64);
     const uuidRef = useRef(crypto.randomUUID()).current;
     let editorPath: string;
     if (fileName) {

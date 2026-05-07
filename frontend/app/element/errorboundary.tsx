@@ -4,7 +4,12 @@
 import React, { ReactNode } from "react";
 
 export class ErrorBoundary extends React.Component<
-    { children: ReactNode; fallback?: React.ReactElement & { error?: Error } },
+    {
+        children: ReactNode;
+        fallback?: React.ReactElement & { error?: Error };
+        resetKey?: string | number;
+        onError?: (error: Error) => void;
+    },
     { error: Error }
 > {
     constructor(props) {
@@ -15,6 +20,13 @@ export class ErrorBoundary extends React.Component<
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
         console.log("ErrorBoundary caught an error:", error, errorInfo);
         this.setState({ error: error });
+        this.props.onError?.(error);
+    }
+
+    componentDidUpdate(prevProps) {
+        if (this.state.error != null && prevProps.resetKey !== this.props.resetKey) {
+            this.setState({ error: null });
+        }
     }
 
     render() {

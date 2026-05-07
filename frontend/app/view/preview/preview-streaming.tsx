@@ -16,13 +16,13 @@ function ImageZoomControls() {
 
     return (
         <div className="absolute flex flex-row z-[2] top-0 right-0 p-[5px] gap-1">
-            <Button onClick={() => zoomIn()} title="Zoom In" className="py-1 px-[5px]">
+            <Button onClick={() => zoomIn()} title="放大" className="py-1 px-[5px]">
                 <i className="fa-sharp fa-plus" />
             </Button>
-            <Button onClick={() => zoomOut()} title="Zoom Out" className="py-1 px-[5px]">
+            <Button onClick={() => zoomOut()} title="缩小" className="py-1 px-[5px]">
                 <i className="fa-sharp fa-minus" />
             </Button>
-            <Button onClick={() => resetTransform()} title="Reset Zoom" className="py-1 px-[5px]">
+            <Button onClick={() => resetTransform()} title="重置缩放" className="py-1 px-[5px]">
                 <i className="fa-sharp fa-rotate-left" />
             </Button>
         </div>
@@ -90,7 +90,7 @@ function StreamingPreview({ model }: SpecializedViewProps) {
     if (fileInfo.mimetype.startsWith("image/")) {
         return <StreamingImagePreview url={streamingUrl} />;
     }
-    return <CenteredDiv>Preview Not Supported</CenteredDiv>;
+    return <CenteredDiv>暂不支持打开该文件</CenteredDiv>;
 }
 
 export { StreamingPreview };

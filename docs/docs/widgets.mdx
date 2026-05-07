@@ -90,6 +90,16 @@ At the right of the widget header, there is an **<code><i className="fa fa-sharp
 
 At the right of the widget header, there is a refresh button **<code><i className="fa fa-sharp fa-solid fa-arrows-rotate" /></code>**. Clicking this button refreshes the directory contents.
 
+##### Automatic Directory Updates
+
+Wave also refreshes directory previews automatically, but it does not blindly redraw the entire tree for every file-system event.
+
+- Local directories subscribe to file-system events and update automatically when files or folders are created, removed, or renamed.
+- Expanded subdirectories refresh independently, so a change inside one open folder does not force every other expanded folder to reload.
+- Write-only activity is filtered when you are sorting by **Name** or **Type**. This avoids constant redraws while commands, editors, or build tools are repeatedly writing files without changing the visible structure of the directory.
+- If you sort by **Size** or **Modified**, write events still refresh automatically because those values can change the visible order of entries.
+- Remote directories do not receive local file-system notifications, so Wave falls back to polling them every 2 seconds. Use the manual refresh button any time you want to force an immediate sync.
+
 ##### Navigate to Common Directories
 
 At the left of the widget header, there is a file icon **<code><i className="fa fa-sharp fa-solid fa-folder-open"/></code>**. Clicking and holding on this icon opens a menu where you can select a common folder to navigate to. The available options are _Home_, _Desktop_, _Downloads_, and _Root_.

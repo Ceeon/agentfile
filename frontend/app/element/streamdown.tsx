@@ -10,7 +10,7 @@ import { bundledLanguages, codeToHtml } from "shiki/bundle/web";
 import { Streamdown } from "streamdown";
 import { throttle } from "throttle-debounce";
 
-const ShikiTheme = "github-dark-high-contrast";
+const ShikiTheme = "github-light";
 
 function extractText(node: React.ReactNode): string {
     if (node == null || typeof node === "boolean") return "";
@@ -26,11 +26,7 @@ function CodePlain({ className = "", isCodeBlock, text }: { className?: string; 
         return <code className={cn("font-mono text-[12px]", className)}>{text}</code>;
     }
 
-    return (
-        <code className={cn("text-secondary font-mono text-[12px] rounded-sm bg-zinc-800/80 px-1.5 py-0.5", className)}>
-            {text}
-        </code>
-    );
+    return <code className={cn("text-secondary font-mono text-[12px] rounded-sm bg-black/5 px-1.5 py-0.5", className)}>{text}</code>;
 }
 
 function CodeHighlight({ className = "", lang, text }: { className?: string; lang: string; text: string }) {
@@ -151,7 +147,7 @@ const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBloc
 
     return (
         <div
-            className={cn("rounded-lg overflow-hidden bg-black my-4", codeBlockMaxWidth && "max-w-full")}
+            className={cn("rounded-lg overflow-hidden bg-white border border-border my-4", codeBlockMaxWidth && "max-w-full")}
             style={
                 codeBlockMaxWidth
                     ? { maxWidth: codeBlockMaxWidth, minWidth: Math.min(400, codeBlockMaxWidth) }
@@ -159,9 +155,9 @@ const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBloc
             }
         >
             <div className="flex items-center justify-between pl-3 pr-2 pt-2 pb-1.5">
-                <span className="text-[11px] text-white/50">{language}</span>
+                <span className="text-[11px] text-secondary">{language}</span>
                 <div className="flex items-center gap-2">
-                    <CopyButton onClick={handleCopy} title="Copy" />
+                    <CopyButton onClick={handleCopy} title="复制" />
                     {onClickExecute && (
                         <IconButton
                             decl={{
@@ -314,11 +310,6 @@ export const WaveStreamdown = ({
                 table: false,
                 mermaid: true,
             }}
-            mermaidConfig={{
-                theme: "dark",
-                darkMode: true,
-            }}
-            defaultOrigin="http://localhost"
             components={components}
         >
             {text}

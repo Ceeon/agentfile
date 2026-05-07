@@ -1235,6 +1235,7 @@ declare global {
         "app:globalhotkey"?: string;
         "app:dismissarchitecturewarning"?: boolean;
         "app:defaultnewblock"?: string;
+        "app:externalterminal"?: string;
         "app:showoverlayblocknums"?: boolean;
         "app:ctrlvpaste"?: boolean;
         "app:confirmquit"?: boolean;
@@ -1289,6 +1290,7 @@ declare global {
         "markdown:fontsize"?: number;
         "markdown:fixedfontsize"?: number;
         "preview:showhiddenfiles"?: boolean;
+        "preview:bookmarks"?: any[];
         "tab:preset"?: string;
         "widget:*"?: boolean;
         "widget:showhelp"?: boolean;

@@ -34,6 +34,7 @@ type ServerImpl struct {
 	InitialEnv    map[string]string
 	JobManagerMap map[string]*JobManagerConnection
 	SockName      string
+	dirWatcher    *remoteDirWatcher
 	Lock          sync.Mutex
 }
 

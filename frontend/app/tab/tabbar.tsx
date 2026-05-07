@@ -3,7 +3,6 @@
 
 import { Button } from "@/app/element/button";
 import { modalsModel } from "@/app/store/modalmodel";
-import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { deleteLayoutModelForTab } from "@/layout/index";
 import { atoms, createTab, getApi, globalStore, setActiveTab } from "@/store/global";
 import { isMacOS, isWindows } from "@/util/platformutil";
@@ -16,7 +15,6 @@ import { IconButton } from "../element/iconbutton";
 import { WorkspaceService } from "../store/services";
 import { Tab } from "./tab";
 import "./tabbar.scss";
-import { WorkspaceSwitcher } from "./workspaceswitcher";
 
 const TabDefaultWidth = 130;
 const TabMinWidth = 100;
@@ -26,7 +24,7 @@ const OSOptions = {
         y: "hidden",
     },
     scrollbars: {
-        theme: "os-theme-dark",
+        theme: "os-theme-light",
         visibility: "auto",
         autoHide: "leave",
         autoHideDelay: 1300,
@@ -41,35 +39,14 @@ interface TabBarProps {
     workspace: Workspace;
 }
 
-const WaveAIButton = memo(() => {
-    const aiPanelOpen = useAtomValue(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
-
-    const onClick = () => {
-        const currentVisible = WorkspaceLayoutModel.getInstance().getAIPanelVisible();
-        WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
-    };
-
-    return (
-        <div
-            className={`flex h-[26px] px-1.5 justify-end items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${aiPanelOpen ? "text-accent" : "text-secondary"}`}
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            onClick={onClick}
-        >
-            <i className="fa fa-sparkles" />
-            <span className="font-bold ml-1 -top-px font-mono">AI</span>
-        </div>
-    );
-});
-WaveAIButton.displayName = "WaveAIButton";
-
 const ConfigErrorMessage = () => {
     const fullConfig = useAtomValue(atoms.fullConfigAtom);
 
     if (fullConfig?.configerrors == null || fullConfig?.configerrors.length == 0) {
         return (
             <div className="max-w-[500px] p-5">
-                <h3 className="font-bold text-base mb-2.5">Configuration Clean</h3>
-                <p>There are no longer any errors detected in your config.</p>
+                <h3 className="font-bold text-base mb-2.5">配置正常</h3>
+                <p>当前没有检测到配置错误。</p>
             </div>
         );
     }
@@ -77,7 +54,7 @@ const ConfigErrorMessage = () => {
         const singleError = fullConfig.configerrors[0];
         return (
             <div className="max-w-[500px] p-5">
-                <h3 className="font-bold text-base mb-2.5">Configuration Error</h3>
+                <h3 className="font-bold text-base mb-2.5">配置错误</h3>
                 <div>
                     {singleError.file}: {singleError.err}
                 </div>
@@ -86,7 +63,7 @@ const ConfigErrorMessage = () => {
     }
     return (
         <div className="max-w-[500px] p-5">
-            <h3 className="font-bold text-base mb-2.5">Configuration Error</h3>
+            <h3 className="font-bold text-base mb-2.5">配置错误</h3>
             <ul>
                 {fullConfig.configerrors.map((error, index) => (
                     <li key={index}>
@@ -115,7 +92,7 @@ const ConfigErrorIcon = ({ buttonRef }: { buttonRef: React.RefObject<HTMLElement
             onClick={handleClick}
         >
             <i className="fa fa-solid fa-exclamation-triangle" />
-            Config Error
+            配置错误
         </Button>
     );
 };
@@ -183,7 +160,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
     const osInstanceRef = useRef<OverlayScrollbars>(null);
     const draggerLeftRef = useRef<HTMLDivElement>(null);
     const draggerRightRef = useRef<HTMLDivElement>(null);
-    const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
     const appMenuButtonRef = useRef<HTMLDivElement>(null);
     const tabWidthRef = useRef<number>(TabDefaultWidth);
     const scrollableRef = useRef<boolean>(false);
@@ -242,15 +218,12 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         const addBtnWidth = addBtnRef.current.getBoundingClientRect().width;
         const configErrorWidth = configErrorButtonRef.current?.getBoundingClientRect().width ?? 0;
         const appMenuButtonWidth = appMenuButtonRef.current?.getBoundingClientRect().width ?? 0;
-        const workspaceSwitcherWidth = workspaceSwitcherRef.current?.getBoundingClientRect().width ?? 0;
-
         const nonTabElementsWidth =
             windowDragLeftWidth +
             windowDragRightWidth +
             addBtnWidth +
             configErrorWidth +
-            appMenuButtonWidth +
-            workspaceSwitcherWidth;
+            appMenuButtonWidth;
         const spaceForTabs = tabbarWrapperWidth - nonTabElementsWidth;
 
         const numberOfTabs = tabIds.length;
@@ -633,7 +606,7 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
         elemtype: "iconbutton",
         icon: "plus",
         click: handleAddTab,
-        title: "Add Tab",
+        title: "新建标签页",
     };
     return (
         <div ref={tabbarWrapperRef} className="tab-bar-wrapper">
@@ -652,7 +625,6 @@ const TabBar = memo(({ workspace }: TabBarProps) => {
                     <i className="fa fa-ellipsis" />
                 </div>
             )}
-            <WorkspaceSwitcher ref={workspaceSwitcherRef} />
             <div className="tab-bar" ref={tabBarRef} data-overlayscrollbars-initialize>
                 <div className="tabs-wrapper" ref={tabsWrapperRef} style={{ width: `${tabsWrapperWidth}px` }}>
                     {tabIds.map((tabId, index) => {
