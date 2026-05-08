@@ -96,6 +96,7 @@ frontend/app/       React application
 emain/              Electron main and preload process code
 cmd/server/         wavesrv entrypoint
 cmd/wsh/            Wave Shell Extensions entrypoint
+docs/engineering-notes/aiprompts  Upstream engineering notes and AI prompt references
 pkg/wshrpc/         RPC types and handlers
 pkg/blockcontroller Block lifecycle
 pkg/shellexec/      Shell process execution

@@ -16,7 +16,7 @@ The separation between model and component ensures:
 
 ## ViewModel Interface
 
-Every view must implement the `ViewModel` interface defined in [`frontend/types/custom.d.ts`](../frontend/types/custom.d.ts:285-341):
+Every view must implement the `ViewModel` interface defined in [`frontend/types/custom.d.ts`](../../../frontend/types/custom.d.ts:285-341):
 
 ```typescript
 interface ViewModel {
@@ -196,7 +196,7 @@ export const MyView: React.FC<ViewComponentProps<MyViewModel>> = ({
 
 ### 3. Register the View
 
-Add your view to the `BlockRegistry` in [`frontend/app/block/block.tsx`](../frontend/app/block/block.tsx:42-55):
+Add your view to the `BlockRegistry` in [`frontend/app/block/block.tsx`](../../../frontend/app/block/block.tsx:42-55):
 
 ```typescript
 const BlockRegistry: Map<string, ViewModelClass> = new Map();
@@ -217,7 +217,7 @@ Users can create blocks with your view type:
 
 ## Real-World Examples
 
-### Example 1: Terminal View ([`term-model.ts`](../frontend/app/view/term/term-model.ts))
+### Example 1: Terminal View ([`term-model.ts`](../../../frontend/app/view/term/term-model.ts))
 
 The terminal view demonstrates:
 - **Connection management** via `manageConnection` atom
@@ -251,7 +251,7 @@ this.endIconButtons = jotai.atom((get) => {
 });
 ```
 
-### Example 2: Web View ([`webview.tsx`](../frontend/app/view/webview/webview.tsx))
+### Example 2: Web View ([`webview.tsx`](../../../frontend/app/view/webview/webview.tsx))
 
 The web view shows:
 - **Complex header controls** (back/forward/home/URL input)
@@ -518,8 +518,8 @@ const searchAtoms = useSearch();
 
 ## Additional Resources
 
-- [`frontend/app/block/blockframe.tsx`](../frontend/app/block/blockframe.tsx) - Block header rendering
-- [`frontend/app/view/term/term-model.ts`](../frontend/app/view/term/term-model.ts) - Complex view example
-- [`frontend/app/view/webview/webview.tsx`](../frontend/app/view/webview/webview.tsx) - Navigation UI example
-- [`frontend/types/custom.d.ts`](../frontend/types/custom.d.ts) - Type definitions
-- Project coding rules in [`.roo/rules/`](../.roo/rules/)
+- [`frontend/app/block/blockframe.tsx`](../../../frontend/app/block/blockframe.tsx) - Block header rendering
+- [`frontend/app/view/term/term-model.ts`](../../../frontend/app/view/term/term-model.ts) - Complex view example
+- [`frontend/app/view/webview/webview.tsx`](../../../frontend/app/view/webview/webview.tsx) - Navigation UI example
+- [`frontend/types/custom.d.ts`](../../../frontend/types/custom.d.ts) - Type definitions
+- Project coding rules in [`.roo/rules/`](../../../.roo/rules/)

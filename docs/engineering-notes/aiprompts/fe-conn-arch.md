@@ -40,7 +40,7 @@ The frontend connection architecture provides a reactive interface for managing 
 
 ## Key Components
 
-### 1. Connection State Management ([`frontend/app/store/global.ts`](../frontend/app/store/global.ts))
+### 1. Connection State Management ([`frontend/app/store/global.ts`](../../../frontend/app/store/global.ts))
 
 **ConnStatusMapAtom**
 ```typescript
@@ -88,7 +88,7 @@ const allConnStatusAtom = atom<ConnStatus[]>((get) => {
 - Used by connection modal to display all available connections
 - Automatically updates when any connection status changes
 
-### 2. Connection Button UI ([`frontend/app/block/blockutil.tsx`](../frontend/app/block/blockutil.tsx))
+### 2. Connection Button UI ([`frontend/app/block/blockutil.tsx`](../../../frontend/app/block/blockutil.tsx))
 
 **ConnectionButton Component**
 
@@ -127,7 +127,7 @@ function computeConnColorNum(connStatus: ConnStatus): number {
 - Frontend cycles through 8 CSS color variables
 - `var(--conn-icon-color-1)` through `var(--conn-icon-color-8)`
 
-### 3. Connection Selection Modal ([`frontend/app/modals/conntypeahead.tsx`](../frontend/app/modals/conntypeahead.tsx))
+### 3. Connection Selection Modal ([`frontend/app/modals/conntypeahead.tsx`](../../../frontend/app/modals/conntypeahead.tsx))
 
 **ChangeConnectionBlockModal Component**
 
@@ -209,7 +209,7 @@ function filterConnections(
 }
 ```
 
-### 4. Connection Status Overlay ([`frontend/app/block/blockframe.tsx`](../frontend/app/block/blockframe.tsx))
+### 4. Connection Status Overlay ([`frontend/app/block/blockframe.tsx`](../../../frontend/app/block/blockframe.tsx))
 
 **ConnStatusOverlay Component**
 
@@ -249,7 +249,7 @@ const handleDisableWsh = async () => {
 
 View models integrate connection state into their reactive data flow:
 
-#### Terminal View Model ([`frontend/app/view/term/term-model.ts`](../frontend/app/view/term/term-model.ts))
+#### Terminal View Model ([`frontend/app/view/term/term-model.ts`](../../../frontend/app/view/term/term-model.ts))
 
 ```typescript
 class TermViewModel implements ViewModel {
@@ -299,7 +299,7 @@ endIconButtons = atom((get) => {
 })
 ```
 
-#### Preview View Model ([`frontend/app/view/preview/preview-model.tsx`](../frontend/app/view/preview/preview-model.tsx))
+#### Preview View Model ([`frontend/app/view/preview/preview-model.tsx`](../../../frontend/app/view/preview/preview-model.tsx))
 
 ```typescript
 class PreviewModel implements ViewModel {

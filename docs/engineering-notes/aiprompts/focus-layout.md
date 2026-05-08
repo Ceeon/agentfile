@@ -14,7 +14,7 @@ The system uses local atoms as the source of truth with async persistence to the
 
 ### 1. Setting Focus in Layout Operations
 
-Throughout [`layoutTree.ts`](../frontend/layout/lib/layoutTree.ts), operations directly mutate `layoutState.focusedNodeId`:
+Throughout [`layoutTree.ts`](../../../frontend/layout/lib/layoutTree.ts), operations directly mutate `layoutState.focusedNodeId`:
 
 ```typescript
 // Example from insertNode
@@ -31,7 +31,7 @@ This happens in ~10 places: insertNode, insertNodeAtIndex, deleteNode, focusNode
 
 ### 2. Committing to Local Atom
 
-The [`LayoutModel.treeReducer()`](../frontend/layout/lib/layoutModel.ts:547) commits changes:
+The [`LayoutModel.treeReducer()`](../../../frontend/layout/lib/layoutModel.ts:547) commits changes:
 
 ```typescript
 treeReducer(action: LayoutTreeAction, setState = true): boolean {

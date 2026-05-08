@@ -1,6 +1,6 @@
 # OpenAI Request Input Field Structure (On-the-Wire Format)
 
-This document describes the actual JSON structure sent to the OpenAI API in the `input` field of [`OpenAIRequest`](../pkg/aiusechat/openai/openai-convertmessage.go:111).
+This document describes the actual JSON structure sent to the OpenAI API in the `input` field of [`OpenAIRequest`](../../../pkg/aiusechat/openai/openai-convertmessage.go:111).
 
 ## Overview
 
@@ -10,11 +10,11 @@ The `input` field is a JSON array containing one of three object types:
 2. **Function Calls** (tool invocations) - `OpenAIFunctionCallInput` objects
 3. **Function Call Results** (tool outputs) - `OpenAIFunctionCallOutputInput` objects
 
-These are converted from [`OpenAIChatMessage`](../pkg/aiusechat/openai/openai-backend.go:46-52) internal format and cleaned before transmission ([see lines 485-494](../pkg/aiusechat/openai/openai-backend.go:485-494)).
+These are converted from [`OpenAIChatMessage`](../../../pkg/aiusechat/openai/openai-backend.go:46-52) internal format and cleaned before transmission ([see lines 485-494](../../../pkg/aiusechat/openai/openai-backend.go:485-494)).
 
 ## 1. Message Objects (User/Assistant)
 
-User and assistant messages sent as [`OpenAIMessage`](../pkg/aiusechat/openai/openai-backend.go:54-57):
+User and assistant messages sent as [`OpenAIMessage`](../../../pkg/aiusechat/openai/openai-backend.go:54-57):
 
 ```json
 {
@@ -78,7 +78,7 @@ User and assistant messages sent as [`OpenAIMessage`](../pkg/aiusechat/openai/op
 
 ## 2. Function Call Objects (Tool Invocations)
 
-Tool calls from the model sent as [`OpenAIFunctionCallInput`](../pkg/aiusechat/openai/openai-backend.go:59-67):
+Tool calls from the model sent as [`OpenAIFunctionCallInput`](../../../pkg/aiusechat/openai/openai-backend.go:59-67):
 
 ```json
 {
@@ -99,7 +99,7 @@ Tool calls from the model sent as [`OpenAIFunctionCallInput`](../pkg/aiusechat/o
 
 ## 3. Function Call Output Objects (Tool Results)
 
-Tool execution results sent as [`OpenAIFunctionCallOutputInput`](../pkg/aiusechat/openai/openai-backend.go:69-75):
+Tool execution results sent as [`OpenAIFunctionCallOutputInput`](../../../pkg/aiusechat/openai/openai-backend.go:69-75):
 
 ```json
 {
@@ -192,7 +192,7 @@ Tool execution results sent as [`OpenAIFunctionCallOutputInput`](../pkg/aiusecha
 
 ## Cleaning Process
 
-Before transmission, internal fields are removed ([cleanup code](../pkg/aiusechat/openai/openai-backend.go:485-494)):
+Before transmission, internal fields are removed ([cleanup code](../../../pkg/aiusechat/openai/openai-backend.go:485-494)):
 
 - **Messages**: `previewurl` field removed, `filename` removed from `input_image` blocks
 - **Function Calls**: `toolusedata` field removed

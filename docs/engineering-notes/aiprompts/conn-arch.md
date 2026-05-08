@@ -52,37 +52,37 @@ Wave Terminal's connection system is designed to provide a unified interface for
 ### 1. Block Controllers (`pkg/blockcontroller/`)
 
 **Primary Files:**
-- [`blockcontroller.go`](../pkg/blockcontroller/blockcontroller.go) - Controller registry and orchestration
-- [`shellcontroller.go`](../pkg/blockcontroller/shellcontroller.go) - Shell/terminal controller implementation
+- [`blockcontroller.go`](../../../pkg/blockcontroller/blockcontroller.go) - Controller registry and orchestration
+- [`shellcontroller.go`](../../../pkg/blockcontroller/shellcontroller.go) - Shell/terminal controller implementation
 
 **Responsibilities:**
 - **Controller Registry**: Maintains a global map of active block controllers (`controllerRegistry`)
 - **Lifecycle Management**: Handles controller creation, starting, stopping, and switching
-- **Connection Verification**: Checks connection status before starting shell processes ([`CheckConnStatus()`](../pkg/blockcontroller/blockcontroller.go:360))
+- **Connection Verification**: Checks connection status before starting shell processes ([`CheckConnStatus()`](../../../pkg/blockcontroller/blockcontroller.go:360))
 - **Controller Types**: Supports different controller types (shell, cmd, tsunami)
 
 **Key Functions:**
-- [`ResyncController()`](../pkg/blockcontroller/blockcontroller.go:120) - Main entry point for synchronizing block state with desired controller
-- [`registerController()`](../pkg/blockcontroller/blockcontroller.go:84) - Registers a new controller, stopping any existing one
-- [`getController()`](../pkg/blockcontroller/blockcontroller.go:78) - Retrieves active controller for a block
+- [`ResyncController()`](../../../pkg/blockcontroller/blockcontroller.go:120) - Main entry point for synchronizing block state with desired controller
+- [`registerController()`](../../../pkg/blockcontroller/blockcontroller.go:84) - Registers a new controller, stopping any existing one
+- [`getController()`](../../../pkg/blockcontroller/blockcontroller.go:78) - Retrieves active controller for a block
 
 **ShellController Details:**
 - Implements the `Controller` interface
-- Manages shell processes via [`ShellProc`](../pkg/shellexec/shellexec.go:48)
+- Manages shell processes via [`ShellProc`](../../../pkg/shellexec/shellexec.go:48)
 - Handles three connection types via `ConnUnion`:
   - **Local**: Direct process execution on local machine
   - **SSH**: Remote execution via SSH connections
   - **WSL**: Windows Subsystem for Linux execution
 - Key methods:
-  - [`setupAndStartShellProcess()`](../pkg/blockcontroller/shellcontroller.go:364) - Sets up and starts shell process
-  - [`getConnUnion()`](../pkg/blockcontroller/shellcontroller.go:321) - Determines connection type and retrieves connection object
-  - [`manageRunningShellProcess()`](../pkg/blockcontroller/shellcontroller.go:500+) - Manages I/O for running process
+  - [`setupAndStartShellProcess()`](../../../pkg/blockcontroller/shellcontroller.go:364) - Sets up and starts shell process
+  - [`getConnUnion()`](../../../pkg/blockcontroller/shellcontroller.go:321) - Determines connection type and retrieves connection object
+  - [`manageRunningShellProcess()`](../../../pkg/blockcontroller/shellcontroller.go:500+) - Manages I/O for running process
 
 ### 2. Connection Controllers
 
 #### SSH Connections (`pkg/remote/conncontroller/`)
 
-**Primary File:** [`conncontroller.go`](../pkg/remote/conncontroller/conncontroller.go)
+**Primary File:** [`conncontroller.go`](../../../pkg/remote/conncontroller/conncontroller.go)
 
 **Architecture:**
 - **Global Registry**: `clientControllerMap` maintains all SSH connections
@@ -116,22 +116,22 @@ type SSHConn struct {
    - Handles authentication (pubkey, password, keyboard-interactive)
    - Supports ProxyJump for multi-hop connections
 
-2. **Domain Socket Setup** ([`OpenDomainSocketListener()`](../pkg/remote/conncontroller/conncontroller.go:201)):
+2. **Domain Socket Setup** ([`OpenDomainSocketListener()`](../../../pkg/remote/conncontroller/conncontroller.go:201)):
    - Creates Unix domain socket on remote host (`/tmp/waveterm-*.sock`)
    - Enables bidirectional RPC communication
    - Socket used by both connserver and shell processes
 
 3. **WSH (Wave Shell Extensions) Management**:
-   - **Version Check** ([`StartConnServer()`](../pkg/remote/conncontroller/conncontroller.go:277)): Runs `wsh version` to check installation
-   - **Installation** ([`InstallWsh()`](../pkg/remote/conncontroller/conncontroller.go:478)): Copies appropriate WSH binary to remote
-   - **Update** ([`UpdateWsh()`](../pkg/remote/conncontroller/conncontroller.go:417)): Updates existing WSH installation
-   - **User Prompts** ([`getPermissionToInstallWsh()`](../pkg/remote/conncontroller/conncontroller.go:434)): Asks user for install permission
+   - **Version Check** ([`StartConnServer()`](../../../pkg/remote/conncontroller/conncontroller.go:277)): Runs `wsh version` to check installation
+   - **Installation** ([`InstallWsh()`](../../../pkg/remote/conncontroller/conncontroller.go:478)): Copies appropriate WSH binary to remote
+   - **Update** ([`UpdateWsh()`](../../../pkg/remote/conncontroller/conncontroller.go:417)): Updates existing WSH installation
+   - **User Prompts** ([`getPermissionToInstallWsh()`](../../../pkg/remote/conncontroller/conncontroller.go:434)): Asks user for install permission
 
 4. **Connection Server** (`wsh connserver`):
    - Long-running process on remote host
    - Provides RPC services for file operations, command execution, etc.
    - Communicates via domain socket
-   - Template: [`ConnServerCmdTemplate`](../pkg/remote/conncontroller/conncontroller.go:74)
+   - Template: [`ConnServerCmdTemplate`](../../../pkg/remote/conncontroller/conncontroller.go:74)
 
 **Connection Flow:**
 ```
@@ -148,12 +148,12 @@ type SSHConn struct {
 
 **Responsibilities:**
 - **Authentication Methods**:
-  - Public key with optional passphrase ([`createPublicKeyCallback()`](../pkg/remote/sshclient.go:118))
-  - Password authentication ([`createPasswordCallbackPrompt()`](../pkg/remote/sshclient.go:227))
-  - Keyboard-interactive ([`createInteractiveKbdInteractiveChallenge()`](../pkg/remote/sshclient.go:264))
+  - Public key with optional passphrase ([`createPublicKeyCallback()`](../../../pkg/remote/sshclient.go:118))
+  - Password authentication ([`createPasswordCallbackPrompt()`](../../../pkg/remote/sshclient.go:227))
+  - Keyboard-interactive ([`createInteractiveKbdInteractiveChallenge()`](../../../pkg/remote/sshclient.go:264))
   - SSH agent support
 
-- **Known Hosts Verification** ([`createHostKeyCallback()`](../pkg/remote/sshclient.go:429)):
+- **Known Hosts Verification** ([`createHostKeyCallback()`](../../../pkg/remote/sshclient.go:429)):
   - Reads `~/.ssh/known_hosts` and global known_hosts
   - Prompts user for unknown hosts
   - Handles key changes/mismatches
@@ -163,12 +163,12 @@ type SSHConn struct {
   - Max depth: `SshProxyJumpMaxDepth = 10`
 
 - **User Interaction**:
-  - Integrates with Wave's [`userinput`](../pkg/userinput/) system
+  - Integrates with Wave's [`userinput`](../../../pkg/userinput/) system
   - Non-blocking prompts for passwords, passphrases, host verification
 
 #### WSL Connections (`pkg/wslconn/`)
 
-**Primary File:** [`wslconn.go`](../pkg/wslconn/wslconn.go)
+**Primary File:** [`wslconn.go`](../../../pkg/wslconn/wslconn.go)
 
 **Architecture:**
 - **Similar to SSH**: Parallel structure to `conncontroller` but for WSL
@@ -191,7 +191,7 @@ type WslConn struct {
 
 **Key Differences from SSH:**
 - **No Network Socket**: WSL processes run locally, no SSH connection needed
-- **Domain Socket Path**: Uses predetermined path ([`wavebase.RemoteFullDomainSocketPath`](../pkg/wavebase/))
+- **Domain Socket Path**: Uses predetermined path ([`wavebase.RemoteFullDomainSocketPath`](../../../pkg/wavebase/))
 - **Command Execution**: Uses `wsl.exe` command-line tool
 - **Simpler Authentication**: No auth needed, user already logged into Windows
 
@@ -207,7 +207,7 @@ type WslConn struct {
 
 ### 3. Shell Process Execution (`pkg/shellexec/`)
 
-**Primary File:** [`shellexec.go`](../pkg/shellexec/shellexec.go)
+**Primary File:** [`shellexec.go`](../../../pkg/shellexec/shellexec.go)
 
 **ShellProc Structure:**
 ```go
@@ -221,16 +221,16 @@ type ShellProc struct {
 ```
 
 **ConnInterface Implementations:**
-- **Local**: [`CombinedConnInterface`](../pkg/shellexec/) wraps `os/exec.Cmd` with PTY
-- **SSH**: [`RemoteConnInterface`](../pkg/shellexec/) wraps SSH session
-- **WSL**: [`WslConnInterface`](../pkg/shellexec/) wraps WSL command
+- **Local**: [`CombinedConnInterface`](../../../pkg/shellexec/) wraps `os/exec.Cmd` with PTY
+- **SSH**: [`RemoteConnInterface`](../../../pkg/shellexec/) wraps SSH session
+- **WSL**: [`WslConnInterface`](../../../pkg/shellexec/) wraps WSL command
 
 **Process Startup Functions:**
-- [`StartLocalShellProc()`](../pkg/shellexec/) - Local shell processes
-- [`StartRemoteShellProc()`](../pkg/shellexec/) - SSH remote shells (with WSH)
-- [`StartRemoteShellProcNoWsh()`](../pkg/shellexec/) - SSH remote shells (no WSH)
-- [`StartWslShellProc()`](../pkg/shellexec/) - WSL shells (with WSH)
-- [`StartWslShellProcNoWsh()`](../pkg/shellexec/) - WSL shells (no WSH)
+- [`StartLocalShellProc()`](../../../pkg/shellexec/) - Local shell processes
+- [`StartRemoteShellProc()`](../../../pkg/shellexec/) - SSH remote shells (with WSH)
+- [`StartRemoteShellProcNoWsh()`](../../../pkg/shellexec/) - SSH remote shells (no WSH)
+- [`StartWslShellProc()`](../../../pkg/shellexec/) - WSL shells (with WSH)
+- [`StartWslShellProcNoWsh()`](../../../pkg/shellexec/) - WSL shells (no WSH)
 
 **Key Features:**
 - **PTY Management**: Pseudo-terminal for interactive shells
@@ -241,7 +241,7 @@ type ShellProc struct {
 
 **Purpose**: Provides abstraction layer for running commands across different connection types
 
-**Primary File:** [`ssh-impl.go`](../pkg/genconn/ssh-impl.go)
+**Primary File:** [`ssh-impl.go`](../../../pkg/genconn/ssh-impl.go)
 
 **Interface Hierarchy:**
 ```go
@@ -270,17 +270,17 @@ proc.Wait()
 
 ### 5. Shell Utilities (`pkg/util/shellutil/`)
 
-**Primary File:** [`shellutil.go`](../pkg/util/shellutil/shellutil.go)
+**Primary File:** [`shellutil.go`](../../../pkg/util/shellutil/shellutil.go)
 
 **Responsibilities:**
 
 1. **Shell Detection**:
-   - [`DetectLocalShellPath()`](../pkg/util/shellutil/shellutil.go:87) - Finds user's default shell
-   - [`GetShellTypeFromShellPath()`](../pkg/util/shellutil/shellutil.go:462) - Identifies shell type (bash, zsh, fish, pwsh)
-   - [`DetectShellTypeAndVersion()`](../pkg/util/shellutil/shellutil.go:486) - Gets shell version info
+   - [`DetectLocalShellPath()`](../../../pkg/util/shellutil/shellutil.go:87) - Finds user's default shell
+   - [`GetShellTypeFromShellPath()`](../../../pkg/util/shellutil/shellutil.go:462) - Identifies shell type (bash, zsh, fish, pwsh)
+   - [`DetectShellTypeAndVersion()`](../../../pkg/util/shellutil/shellutil.go:486) - Gets shell version info
 
 2. **Shell Integration Files**:
-   - [`InitCustomShellStartupFiles()`](../pkg/util/shellutil/shellutil.go:270) - Creates Wave's shell integration
+   - [`InitCustomShellStartupFiles()`](../../../pkg/util/shellutil/shellutil.go:270) - Creates Wave's shell integration
    - Manages startup files for each shell type:
      - Bash: `.bashrc` in `shell/bash/`
      - Zsh: `.zshrc`, `.zprofile`, etc. in `shell/zsh/`
@@ -288,15 +288,15 @@ proc.Wait()
      - PowerShell: `wavepwsh.ps1` in `shell/pwsh/`
 
 3. **Environment Management**:
-   - [`WaveshellLocalEnvVars()`](../pkg/util/shellutil/shellutil.go:218) - Wave-specific environment variables
-   - [`UpdateCmdEnv()`](../pkg/util/shellutil/shellutil.go:231) - Updates command environment
+   - [`WaveshellLocalEnvVars()`](../../../pkg/util/shellutil/shellutil.go:218) - Wave-specific environment variables
+   - [`UpdateCmdEnv()`](../../../pkg/util/shellutil/shellutil.go:231) - Updates command environment
 
 4. **WSH Binary Management**:
-   - [`GetLocalWshBinaryPath()`](../pkg/util/shellutil/shellutil.go:334) - Locates platform-specific WSH binary
+   - [`GetLocalWshBinaryPath()`](../../../pkg/util/shellutil/shellutil.go:334) - Locates platform-specific WSH binary
    - Supports multiple OS/arch combinations
 
 5. **Git Bash Detection** (Windows):
-   - [`FindGitBash()`](../pkg/util/shellutil/shellutil.go:156) - Locates Git Bash installation
+   - [`FindGitBash()`](../../../pkg/util/shellutil/shellutil.go:156) - Locates Git Bash installation
    - Checks multiple common installation paths
 
 ## Connection Types and Workflows
@@ -306,9 +306,9 @@ proc.Wait()
 **Connection Name**: `"local"`, `"local:"`, or `""` (empty)
 
 **Workflow:**
-1. Block controller checks connection type via [`IsLocalConnName()`](../pkg/remote/conncontroller/conncontroller.go:80)
+1. Block controller checks connection type via [`IsLocalConnName()`](../../../pkg/remote/conncontroller/conncontroller.go:80)
 2. No connection setup needed
-3. Shell process started directly via [`StartLocalShellProc()`](../pkg/shellexec/)
+3. Shell process started directly via [`StartLocalShellProc()`](../../../pkg/shellexec/)
 4. Uses `os/exec.Cmd` with PTY
 5. WSH integration via environment variables
 
@@ -319,7 +319,7 @@ proc.Wait()
 
 ### SSH Connections
 
-**Connection Name**: `"user@host:port"` (parsed by [`remote.ParseOpts()`](../pkg/remote/))
+**Connection Name**: `"user@host:port"` (parsed by [`remote.ParseOpts()`](../../../pkg/remote/))
 
 **Full Connection Workflow:**
 
@@ -443,7 +443,7 @@ proc.Wait()
 
 **Purpose**: Pass connection-specific environment variables to shell processes
 
-**Implementation:** [`shellutil.TokenSwapEntry`](../pkg/util/shellutil/)
+**Implementation:** [`shellutil.TokenSwapEntry`](../../../pkg/util/shellutil/)
 
 **Flow:**
 1. ShellController creates swap token before starting process
@@ -473,8 +473,8 @@ proc.Wait()
 - ProxyJump failure → Error shows which jump host failed
 
 **Recovery Mechanisms:**
-- [`conn.Reconnect(ctx)`](../pkg/remote/conncontroller/) - Close and re-establish connection
-- [`conn.WaitForConnect(ctx)`](../pkg/remote/conncontroller/) - Block until connected
+- [`conn.Reconnect(ctx)`](../../../pkg/remote/conncontroller/) - Close and re-establish connection
+- [`conn.WaitForConnect(ctx)`](../../../pkg/remote/conncontroller/) - Block until connected
 - Automatic fallback to no-WSH mode on installation failure
 
 ### Process Failures
@@ -485,15 +485,15 @@ proc.Wait()
 - I/O errors → Logged and surfaced to user
 
 **Cleanup:**
-- [`ShellProc.Close()`](../pkg/shellexec/shellexec.go:56) - Graceful then forceful kill
-- [`SSHConn.close_nolock()`](../pkg/remote/conncontroller/conncontroller.go:167) - Cleanup all resources
-- [`deleteController()`](../pkg/blockcontroller/blockcontroller.go:101) - Remove from registry
+- [`ShellProc.Close()`](../../../pkg/shellexec/shellexec.go:56) - Graceful then forceful kill
+- [`SSHConn.close_nolock()`](../../../pkg/remote/conncontroller/conncontroller.go:167) - Cleanup all resources
+- [`deleteController()`](../../../pkg/blockcontroller/blockcontroller.go:101) - Remove from registry
 
 ## Configuration Integration
 
 ### Connection Configuration
 
-**Source:** [`pkg/wconfig/`](../pkg/wconfig/)
+**Source:** [`pkg/wconfig/`](../../../pkg/wconfig/)
 
 **Per-Connection Settings:**
 - `conn:wshenabled` - Enable/disable WSH
@@ -557,7 +557,7 @@ sp.CloseOnce.Do(func() {   // Ensure single execution
 
 ### Connection Events
 
-**Published via:** [`pkg/wps/`](../pkg/wps/) (Wave Publish/Subscribe)
+**Published via:** [`pkg/wps/`](../../../pkg/wps/) (Wave Publish/Subscribe)
 
 **Event Types:**
 - `Event_ConnChange` - Connection status changed

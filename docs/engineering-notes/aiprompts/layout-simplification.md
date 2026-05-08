@@ -34,11 +34,11 @@ React re-renders with updated state
 
 ### What the Backend Actually Does
 
-**Backend Reads** (from [`pkg/wshrpc/wshserver/resolvers.go`](../pkg/wshrpc/wshserver/resolvers.go:196-206)):
+**Backend Reads** (from [`pkg/wshrpc/wshserver/resolvers.go`](../../../pkg/wshrpc/wshserver/resolvers.go:196-206)):
 - **`LeafOrder`** - Used to resolve block numbers in commands (e.g., `wsh block:1` → blockId lookup)
 
-**Backend Writes** (from [`pkg/wcore/layout.go`](../pkg/wcore/layout.go)):
-- **`PendingBackendActions`** - Queued layout actions via [`QueueLayoutAction()`](../pkg/wcore/layout.go:101-118)
+**Backend Writes** (from [`pkg/wcore/layout.go`](../../../pkg/wcore/layout.go)):
+- **`PendingBackendActions`** - Queued layout actions via [`QueueLayoutAction()`](../../../pkg/wcore/layout.go:101-118)
 
 **Backend NEVER touches**:
 - **`RootNode`** - Never read, only written by frontend for persistence
@@ -49,8 +49,8 @@ React re-renders with updated state
 
 ### Complexity Symptoms
 
-1. **Generation tracking**: [`layoutState.generation++`](../frontend/layout/lib/layoutTree.ts:294) appears in 10+ places, only to trigger atom writes
-2. **Bidirectional atoms**: [`withLayoutTreeStateAtomFromTab()`](../frontend/layout/lib/layoutAtom.ts:18-60) has complex read/write logic
+1. **Generation tracking**: [`layoutState.generation++`](../../../frontend/layout/lib/layoutTree.ts:294) appears in 10+ places, only to trigger atom writes
+2. **Bidirectional atoms**: [`withLayoutTreeStateAtomFromTab()`](../../../frontend/layout/lib/layoutAtom.ts:18-60) has complex read/write logic
 3. **Timing coordination**: The entire Section 8 of the WaveAI focus proposal exists only because of race conditions between focus updates and atom commits
 4. **False reactivity**: Changes to `focusedNodeId` trigger full tree state propagation even though they're unrelated to tree structure
 
@@ -248,7 +248,7 @@ class LayoutModel {
 
 ### 4. Remove Generation Tracking
 
-The `generation` field can be removed entirely from [`LayoutTreeState`](../frontend/layout/lib/types.ts):
+The `generation` field can be removed entirely from [`LayoutTreeState`](../../../frontend/layout/lib/types.ts):
 
 ```typescript
 // frontend/layout/lib/types.ts
@@ -263,7 +263,7 @@ export interface LayoutTreeState {
 }
 ```
 
-And remove all `generation++` calls from [`layoutTree.ts`](../frontend/layout/lib/layoutTree.ts) (appears in 10+ places).
+And remove all `generation++` calls from [`layoutTree.ts`](../../../frontend/layout/lib/layoutTree.ts) (appears in 10+ places).
 
 ### 5. Simplified layoutAtom.ts
 
@@ -337,8 +337,8 @@ treeReducer(action: LayoutTreeAction) {
 
 **Can delete**:
 - `generation` field and all `generation++` calls (~15 places)
-- Complex bidirectional atom logic in [`layoutAtom.ts`](../frontend/layout/lib/layoutAtom.ts) (~40 lines)
-- `lastTreeStateGeneration` tracking in [`LayoutModel`](../frontend/layout/lib/layoutModel.ts)
+- Complex bidirectional atom logic in [`layoutAtom.ts`](../../../frontend/layout/lib/layoutAtom.ts) (~40 lines)
+- `lastTreeStateGeneration` tracking in [`LayoutModel`](../../../frontend/layout/lib/layoutModel.ts)
 - All `generation > this.treeState.generation` checks
 
 **Total**: ~200-300 lines of complex coordination code deleted
@@ -406,7 +406,7 @@ private persistToBackend() {
 
 ### Current System (Already Uses Shallow Updates)
 
-Looking at the current code in [`layoutModel.ts:587`](../frontend/layout/lib/layoutModel.ts:587):
+Looking at the current code in [`layoutModel.ts:587`](../../../frontend/layout/lib/layoutModel.ts:587):
 
 ```typescript
 setTreeStateAtom(bumpGeneration = false) {
@@ -445,7 +445,7 @@ oldState.rootNode === newState.rootNode  // TRUE - same tree reference
 
 ### Tree Mutations Don't Need Immutability
 
-All tree operations in [`layoutTree.ts`](../frontend/layout/lib/layoutTree.ts) **mutate in place**:
+All tree operations in [`layoutTree.ts`](../../../frontend/layout/lib/layoutTree.ts) **mutate in place**:
 - `insertNode()` - Mutates `layoutState.rootNode`
 
 ### Derived Atoms Will Update Correctly ✓
@@ -584,7 +584,7 @@ This creates a **completely new object** with new references, which is even more
 ✅ **Tree mutations are fine** - They've always worked this way
 
 
-**Current**: Backend queues actions via [`QueueLayoutAction()`](../pkg/wcore/layout.go:101), frontend processes via `pendingBackendActions`.
+**Current**: Backend queues actions via [`QueueLayoutAction()`](../../../pkg/wcore/layout.go:101), frontend processes via `pendingBackendActions`.
 
 **After**: Same - `initializeFromWaveObject()` processes pending actions. No change needed.
 
@@ -616,7 +616,7 @@ This creates a **completely new object** with new references, which is even more
 
 ### Phase 3: Cleanup
 
-1. Delete bidirectional atom logic from [`layoutAtom.ts`](../frontend/layout/lib/layoutAtom.ts)
+1. Delete bidirectional atom logic from [`layoutAtom.ts`](../../../frontend/layout/lib/layoutAtom.ts)
 2. Remove `generation` field from `LayoutTreeState`
 3. Simplify `onTreeStateAtomUpdated()` (only needed for `pendingBackendActions`)
 4. Update documentation

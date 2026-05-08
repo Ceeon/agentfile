@@ -77,7 +77,7 @@ The full API is defined in custom.d.ts as type ElectronApi.
 
 ### Development Documentation
 
-The `/aiprompts` directory contains comprehensive guides for common development tasks:
+The `docs/engineering-notes/aiprompts` directory contains comprehensive guides for common development tasks:
 
 - **config-system.md** - Complete guide for adding new configuration settings, including the hierarchical config system with global, connection, and block-level overrides
 - **contextmenu.md** - Instructions for adding context menu items and actions

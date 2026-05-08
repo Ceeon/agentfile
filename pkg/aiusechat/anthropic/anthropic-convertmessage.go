@@ -22,7 +22,7 @@ import (
 )
 
 // these conversions are based off the anthropic spec
-// and the aiprompts/aisdk-uimessage-type.md doc (v5)
+// and the docs/engineering-notes/aiprompts/aisdk-uimessage-type.md doc (v5)
 
 // buildAnthropicHTTPRequest creates a complete HTTP request for the Anthropic API
 func buildAnthropicHTTPRequest(ctx context.Context, msgs []anthropicInputMessage, chatOpts uctypes.WaveChatOpts) (*http.Request, error) {
