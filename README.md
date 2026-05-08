@@ -1,108 +1,134 @@
 <p align="center">
   <a href="https://github.com/Ceeon/agentfile">
-	<img alt="Agentfile Logo" src="./public/logos/agentfile-logo-256.png" width="128">
+    <img alt="Agentfile Logo" src="./public/logos/agentfile-logo-256.png" width="128">
   </a>
   <br/>
 </p>
 
 # Agentfile
 
-Agentfile is a customized fork of [Wave Terminal](https://github.com/wavetermdev/waveterm).
-It is not an official Wave Terminal release and is maintained separately by the Agentfile contributors.
+Agentfile is a customized open-source fork of [Wave Terminal](https://github.com/wavetermdev/waveterm).
+It keeps Wave Terminal's terminal, block workspace, file preview, remote access, and `wsh` foundations while adding Agentfile-specific local workflow changes.
 
-The original Wave Terminal project is copyright 2025 Command Line Inc. and licensed under Apache-2.0.
-Agentfile keeps the upstream license and attribution while adding fork-specific changes such as
-data isolation, UI customization, and local development tooling. See [NOTICE](./NOTICE) and
-[AGENTFILE-CHANGELOG.md](./AGENTFILE-CHANGELOG.md) for attribution and modification notes.
+This repository is treated as a continuously editable local app. In development, the user-facing product surface is the Electron window named **Agentfile**. The Vite URL, usually `http://localhost:5173/`, is only the internal Electron renderer dev server and should not be presented as the app itself.
 
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fwavetermdev%2Fwaveterm.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fwavetermdev%2Fwaveterm?ref=badge_shield)
+## What Changed
 
-Wave is an open-source terminal that combines traditional terminal features with graphical capabilities like file previews, web browsing, and AI assistance. It runs on MacOS, Linux, and Windows.
+See [AGENTFILE-CHANGELOG.md](./AGENTFILE-CHANGELOG.md) for the running modification log. Current notable customizations include:
 
-Modern development involves constantly switching between terminals and browsers - checking documentation, previewing files, monitoring systems, and using AI tools. Wave brings these graphical tools directly into the terminal, letting you control them from the command line. This means you can stay in your terminal workflow while still having access to the visual interfaces you need.
+- Agentfile branding for package metadata, Electron app name, window title, dock icon, and local dev app bundle.
+- VSCode-style tree file browser with drag-and-drop move.
+- Removed AI button from the tab bar.
+- Block rename functionality.
+- Data isolation from the original Wave directories using `waveterm2` / `waveterm2-dev`.
+- Project-level development skill for agents at [.claude/skills/agentfile-dev/SKILL.md](./.claude/skills/agentfile-dev/SKILL.md).
 
-![WaveTerm Screenshot](./assets/wave-screenshot.webp)
+## Open Source License And Attribution
 
-## Key Features
+Agentfile is distributed under the [Apache License 2.0](./LICENSE) as a modified fork of Wave Terminal.
 
-- Flexible drag & drop interface to organize terminal blocks, editors, web browsers, and AI assistants
-- Built-in editor for seamlessly editing remote files with syntax highlighting and modern editor features
-- Rich file preview system for remote files (markdown, images, video, PDFs, CSVs, directories)
-- Quick full-screen toggle for any block - expand terminals, editors, and previews for better visibility, then instantly return to multi-block view
-- Wave AI - Context-aware terminal assistant that reads your terminal output, analyzes widgets, and performs file operations
-- AI chat widget with support for multiple models (OpenAI, Claude, Azure, Perplexity, Ollama)
-- Command Blocks for isolating and monitoring individual commands with auto-close options
-- One-click remote connections with full terminal and file system access
-- Secure secret storage using native system backends - store API keys and credentials locally, access them across SSH sessions
-- Rich customization including tab themes, terminal styles, and background images
-- Powerful `wsh` command system for managing your workspace from the CLI and sharing data between terminal sessions
-- Connected file management with `wsh file` - seamlessly copy and sync files between local, remote SSH hosts, Wave filesystem, and S3
+The original Wave Terminal project is copyright 2025 Command Line Inc. Agentfile modifications are copyright 2026 Ceeon and Agentfile contributors unless otherwise noted. The upstream attribution and fork notices are retained in [NOTICE](./NOTICE). Dependency acknowledgements are listed in [ACKNOWLEDGEMENTS.md](./ACKNOWLEDGEMENTS.md).
 
-## Wave AI
+When redistributing Agentfile source or binaries:
 
-Wave AI is your context-aware terminal assistant with access to your workspace:
+- Include the Apache-2.0 [LICENSE](./LICENSE).
+- Keep [NOTICE](./NOTICE) with the upstream Wave Terminal attribution and Agentfile modification notice.
+- Preserve relevant copyright, license, trademark, and attribution notices from upstream source files.
+- Mark modified files where required by Apache-2.0 section 4.
 
-- **Terminal Context**: Reads terminal output and scrollback for debugging and analysis
-- **File Operations**: Read, write, and edit files with automatic backups and user approval
-- **CLI Integration**: Use `wsh ai` to pipe output or attach files directly from the command line
-- **Free Beta**: Included AI credits while we refine the experience
-- **Coming Soon**: Command execution (with approval), local model support, and alternate AI providers (BYOK)
+## Running Locally
 
-Learn more in our [Wave AI documentation](https://docs.waveterm.dev/waveai).
+```bash
+# Quick local development on arm64 macOS
+task electron:quickdev
 
-## Installation
+# General development with hot reload
+task dev
 
-Wave Terminal works on macOS, Linux, and Windows.
+# Run the built app without the dev server
+task start
+```
 
-Platform-specific installation instructions can be found [here](https://docs.waveterm.dev/gettingstarted).
+The quick development path prepares the local Electron app bundle as `Agentfile.app` and runs the app against the dev renderer. It is the default path for day-to-day Agentfile work.
 
-You can also install Wave Terminal directly from: [www.waveterm.dev/download](https://www.waveterm.dev/download).
+Important: `task package` creates installable artifacts and performs a clean. Do not use it for normal local validation unless the task is specifically to build an installer.
 
-### Minimum requirements
+## Project Skill
 
-Wave Terminal runs on the following platforms:
+Agents working in this repository should use the project skill when starting, diagnosing, or validating Agentfile:
 
-- macOS 11 or later (arm64, x64)
-- Windows 10 1809 or later (x64)
-- Linux based on glibc-2.28 or later (Debian 10, RHEL 8, Ubuntu 20.04, etc.) (arm64, x64)
+```bash
+.claude/skills/agentfile-dev/scripts/agentfile-dev.sh status
+.claude/skills/agentfile-dev/scripts/agentfile-dev.sh diagnose
+.claude/skills/agentfile-dev/scripts/agentfile-dev.sh run
+```
 
-The WSH helper runs on the following platforms:
+The skill documents the expected dev data paths, platform-specific commands, and the rule that `localhost:5173` is an internal renderer service rather than a user-facing website.
 
-- macOS 11 or later (arm64, x64)
-- Windows 10 or later (arm64, x64)
-- Linux Kernel 2.6.32 or later (x64), Linux Kernel 3.1 or later (arm64)
+## Architecture
 
-## Roadmap
+Agentfile keeps Wave Terminal's Electron + Go architecture:
 
-Wave is constantly improving! Our roadmap will be continuously updated with our goals for each release. You can find it [here](./ROADMAP.md).
+- **Frontend**: React 19, TypeScript, Electron, Jotai, Tailwind CSS.
+- **Main process**: Electron main process in [emain/](./emain/).
+- **Backend**: Go server and shell helpers in [cmd/](./cmd/) and [pkg/](./pkg/).
+- **Communication**: WebSocket JSON-RPC between the renderer and `wavesrv`.
 
-Want to provide input to our future releases? Connect with us on [Discord](https://discord.gg/XfvZ334gwU) or open a [Feature Request](https://github.com/wavetermdev/waveterm/issues/new/choose)!
+Key directories:
 
-## Links
+```text
+frontend/app/       React application
+emain/              Electron main and preload process code
+cmd/server/         wavesrv entrypoint
+cmd/wsh/            Wave Shell Extensions entrypoint
+pkg/wshrpc/         RPC types and handlers
+pkg/blockcontroller Block lifecycle
+pkg/shellexec/      Shell process execution
+pkg/remote/         SSH connections
+```
 
-- Homepage &mdash; https://www.waveterm.dev
-- Download Page &mdash; https://www.waveterm.dev/download
-- Documentation &mdash; https://docs.waveterm.dev
-- Legacy Documentation &mdash; https://legacydocs.waveterm.dev
-- Blog &mdash; https://blog.waveterm.dev
-- X &mdash; https://x.com/wavetermdev
-- Discord Community &mdash; https://discord.gg/XfvZ334gwU
+## Development Commands
 
-## Building from Source
+```bash
+# Initialize development environment
+task init
 
-See [Building Wave Terminal](BUILD.md).
+# Build backend only
+task build:backend
 
-## Contributing
+# Build server only
+task build:server
 
-Wave uses GitHub Issues for issue tracking.
+# Build Electron/frontend dev bundle
+npm run build:dev
 
-Find more information in our [Contributions Guide](CONTRIBUTING.md), which includes:
+# Run tests
+npm run test
 
-- [Ways to contribute](CONTRIBUTING.md#contributing-to-wave-terminal)
-- [Contribution guidelines](CONTRIBUTING.md#before-you-start)
+# Run coverage
+npm run coverage
+```
 
-## License
+If you need to package, force a fresh backend build first because the package task cleans generated output:
 
-Agentfile is distributed under the Apache-2.0 License as a modified fork of Wave Terminal.
-The upstream Wave Terminal copyright and attribution notices are retained in [NOTICE](./NOTICE).
-For dependency acknowledgements, see [ACKNOWLEDGEMENTS.md](./ACKNOWLEDGEMENTS.md).
+```bash
+rm -rf dist make && task build:server && task package
+```
+
+## Data And Logs
+
+Development data is isolated from other Wave/Agentfile installs:
+
+- macOS data: `~/Library/Application Support/waveterm2-dev`
+- macOS config: `~/.config/waveterm2-dev`
+- Log file: `waveapp.log` inside the data directory
+
+Do not clear development data unless the task explicitly asks for a reset.
+
+## Upstream Links
+
+Agentfile is based on Wave Terminal. For upstream project context, see:
+
+- Upstream repository: https://github.com/wavetermdev/waveterm
+- Upstream documentation: https://docs.waveterm.dev
+- Upstream website: https://www.waveterm.dev

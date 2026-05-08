@@ -10,14 +10,8 @@ import path from "path";
 import { WaveDevVarName, WaveDevViteVarName } from "../frontend/util/isdev";
 import * as keyutil from "../frontend/util/keyutil";
 
-// This is a little trick to ensure that Electron puts all its runtime data into a subdirectory to avoid conflicts with our own data.
-// On macOS, it will store to ~/Library/Application \Support/waveterm2/electron
-// On Linux, it will store to ~/.config/waveterm2/electron
-// On Windows, it will store to %LOCALAPPDATA%/waveterm2/electron
-app.setName("waveterm2/electron");
-
-const isDev = !app.isPackaged;
-const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;
+const isDevVite = !!process.env.ELECTRON_RENDERER_URL;
+const isDev = !app.isPackaged || isDevVite;
 console.log(`Running in ${isDev ? "development" : "production"} mode`);
 if (isDev) {
     process.env[WaveDevVarName] = "1";
@@ -32,7 +26,11 @@ const waveDirName = `${waveDirNamePrefix}${waveDirNameSuffix ? `-${waveDirNameSu
 
 const paths = envPaths("waveterm2", { suffix: waveDirNameSuffix });
 
+const electronUserDataPath = ensurePathExists(path.join(paths.data, "electron"));
+app.setPath("userData", electronUserDataPath);
+app.setPath("sessionData", electronUserDataPath);
 app.setName("Agentfile");
+app.setAppUserModelId("dev.ceeon.agentfile");
 setAgentfileDockIcon();
 const unamePlatform = process.platform;
 const unameArch: string = process.arch;

@@ -28,6 +28,26 @@ export function getElectronExecPath(): string {
     return process.execPath;
 }
 
+function isDevRendererUrl(url: string): boolean {
+    const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+    if (rendererUrl) {
+        try {
+            const rendererIndexUrl = new URL("/index.html", rendererUrl).toString();
+            if (url === rendererIndexUrl || url.startsWith(`${rendererIndexUrl}?`) || url.startsWith(`${rendererIndexUrl}#`)) {
+                return true;
+            }
+        } catch {
+            // Fall through to the fixed dev ports below.
+        }
+    }
+    return (
+        url.startsWith("http://127.0.0.1:5173/index.html") ||
+        url.startsWith("http://localhost:5173/index.html") ||
+        url.startsWith("http://127.0.0.1:5174/index.html") ||
+        url.startsWith("http://localhost:5174/index.html")
+    );
+}
+
 // not necessarily exact, but we use this to help get us unstuck in certain cases
 let lastCtrlShiftSate: boolean = false;
 
@@ -78,14 +98,8 @@ export function handleCtrlShiftState(sender: Electron.WebContents, waveEvent: Wa
 }
 
 export function shNavHandler(event: Electron.Event<Electron.WebContentsWillNavigateEventParams>, url: string) {
-    const isDev = !electron.app.isPackaged;
-    if (
-        isDev &&
-        (url.startsWith("http://127.0.0.1:5173/index.html") ||
-            url.startsWith("http://localhost:5173/index.html") ||
-            url.startsWith("http://127.0.0.1:5174/index.html") ||
-            url.startsWith("http://localhost:5174/index.html"))
-    ) {
+    const isDev = !electron.app.isPackaged || !!process.env.ELECTRON_RENDERER_URL;
+    if (isDev && isDevRendererUrl(url)) {
         // this is a dev-mode hot-reload, ignore it
         console.log("allowing hot-reload of index.html");
         return;

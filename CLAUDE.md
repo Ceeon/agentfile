@@ -12,6 +12,13 @@ Agentfile is a customized fork of Wave Terminal (v0.13.2-alpha.0). It's an Elect
 - Block rename functionality
 - Data isolation from original Wave (uses `waveterm2` directories)
 
+## Project Skills
+
+- `.claude/skills/agentfile-dev/SKILL.md` is the project-level skill for launching, diagnosing, validating, and fixing Agentfile.
+- Use it when the user asks to start Agentfile, check whether it is running, debug startup/preload/main issues, or validate the local development environment.
+- Treat `http://localhost:5173/` as the Electron renderer dev server only. Do not present it as a user-facing web page; the actual product surface is the Agentfile Electron window.
+- Agentfile is treated as a continuously editable local app. Avoid user-facing release-channel labels unless the user explicitly asks about packaging or distribution.
+
 ## Build Commands
 
 ```bash
@@ -149,8 +156,7 @@ Use `wsh://` protocol for file operations:
 
 ## Dev Environment Notes
 
-- **Dev data**: `~/Library/Application Support/waveterm2-dev`
-- **Prod data**: `~/Library/Application Support/waveterm2`
+- **Data**: `~/Library/Application Support/waveterm2-dev`
 - **Logs**: `waveapp.log` in data directory
 
 When dev server starts, set `WCLOUD_ENDPOINT` and `WCLOUD_WS_ENDPOINT` environment variables:
@@ -161,9 +167,9 @@ WCLOUD_ENDPOINT="https://api.waveterm.dev/central" WCLOUD_WS_ENDPOINT="wss://wsa
 ## Important: Testing Changes
 
 **不要关闭用户正在使用的 Agentfile 应用！** 测试代码修改时：
-1. 使用 `task dev` 启动开发版本（使用 waveterm2-dev 数据目录）
-2. 开发版和正式版可以同时运行，互不影响
-3. 只有用户明确要求更新正式版时，才执行 `task package` 并安装
+1. 使用 `task dev` 启动 Agentfile（使用 waveterm2-dev 数据目录）
+2. 不要关闭用户正在使用的 Agentfile 应用
+3. 只有用户明确要求打包时，才执行 `task package`
 
 ## Data Persistence Patterns
 

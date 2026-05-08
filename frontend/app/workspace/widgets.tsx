@@ -450,14 +450,6 @@ const Widgets = memo(() => {
                         </div>
                     </>
                 )}
-                {isDev() ? (
-                    <div
-                        className="flex justify-center items-center w-full py-1 text-accent text-[30px]"
-                        title="当前运行的是 Agentfile 开发版"
-                    >
-                        <i className="fa fa-brands fa-dev fa-fw" />
-                    </div>
-                ) : null}
             </div>
             {showAppsButton && appsButtonRef.current && (
                 <AppsFloatingWindow
@@ -494,14 +486,6 @@ const Widgets = memo(() => {
                             <i className={makeIconClass("cube", true)}></i>
                         </div>
                         <div className="text-xxs mt-0.5 w-full px-0.5 text-center">应用</div>
-                    </div>
-                ) : null}
-                {isDev() ? (
-                    <div
-                        className="flex justify-center items-center w-full py-1 text-accent text-[30px]"
-                        title="当前运行的是 Agentfile 开发版"
-                    >
-                        <i className="fa fa-brands fa-dev fa-fw" />
                     </div>
                 ) : null}
             </div>

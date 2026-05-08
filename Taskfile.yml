@@ -4,7 +4,7 @@
 version: "3"
 
 vars:
-    APP_NAME: "Wave"
+    APP_NAME: "Agentfile"
     BIN_DIR: "bin"
     VERSION:
         sh: node version.cjs
@@ -15,6 +15,11 @@ vars:
     WINGET_PACKAGE: CommandLine.Wave
 
 tasks:
+    electron:prepare-dev-app:
+        desc: Brand the local Electron app used for macOS development.
+        internal: true
+        cmd: node scripts/prepare-electron-dev-app.mjs
+
     electron:dev:
         desc: Run the Electron application via the Vite dev server (enables hot reloading).
         cmd: npm run dev
@@ -22,6 +27,7 @@ tasks:
             - dev
         deps:
             - npm:install
+            - electron:prepare-dev-app
             - build:backend
             - build:tsunamiscaffold
         env:
@@ -38,6 +44,7 @@ tasks:
             - start
         deps:
             - npm:install
+            - electron:prepare-dev-app
             - build:backend
         env:
             WAVETERM_ENVFILE: "{{.ROOT_DIR}}/.env"
@@ -50,6 +57,7 @@ tasks:
         cmd: npm run dev
         deps:
             - npm:install
+            - electron:prepare-dev-app
             - build:backend:quickdev
         env:
             WAVETERM_ENVFILE: "{{.ROOT_DIR}}/.env"

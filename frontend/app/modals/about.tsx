@@ -5,7 +5,6 @@ import Logo from "@/app/asset/logo.svg";
 import { modalsModel } from "@/app/store/modalmodel";
 import { Modal } from "./modal";
 
-import { isDev } from "@/util/isdev";
 import { useState } from "react";
 import { getApi } from "../store/global";
 
@@ -29,8 +28,7 @@ const AboutModal = ({}: AboutModalProps) => {
                     </div>
                 </div>
                 <div className="items-center gap-4 self-stretch w-full text-center">
-                    客户端版本 {details.version} ({isDev() ? "dev-" : ""}
-                    {details.buildTime})
+                    客户端版本 {details.version} ({details.buildTime})
                     <br />
                     更新通道：{updaterChannel}
                 </div>

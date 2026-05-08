@@ -85,7 +85,7 @@ Bug 修复：
 原版 Wave 和 Agentfile 共享同一个应用名和单实例锁，导致 Agentfile 无法启动。修改：
 
 - `app.setName("waveterm/electron")` → `app.setName("waveterm2/electron")`
-- `app.setName("Wave")` → `app.setName("Agentfile")`（生产模式）
+- `app.setName("Wave")` → `app.setName("Agentfile")`
 - `waveDirNamePrefix = "waveterm"` → `waveDirNamePrefix = "waveterm2"`
 - `envPaths("waveterm", ...)` → `envPaths("waveterm2", ...)`
 
@@ -130,8 +130,7 @@ Agentfile 与原版 Wave 完全独立运行，互不影响：
 | 版本 | 数据目录 |
 |-----|---------|
 | Wave 原版 | `~/Library/Application Support/waveterm` |
-| Agentfile 正式版 | `~/Library/Application Support/waveterm2` |
-| Agentfile 开发版 | `~/Library/Application Support/waveterm2-dev` |
+| Agentfile | `~/Library/Application Support/waveterm2-dev` |
 
 ---
 

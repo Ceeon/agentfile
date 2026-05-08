@@ -1,8 +1,8 @@
 ---
 name: agentfile-dev
 description: |
-  诊断、启动、验证、安装和修复 Agentfile 开发版/测试版（macOS、Windows）。当用户要
-  启动 Agentfile、检查是否已运行、排查启动失败、定位开发版 bug、验证环境或给别人部署可边用边改的 Agentfile 环境时使用。
+  诊断、启动、验证、安装和修复 Agentfile 本地开发环境（macOS、Windows）。当用户要
+  启动 Agentfile、检查是否已运行、排查启动失败、定位本地 bug、验证环境或给别人部署可边用边改的 Agentfile 环境时使用。
 ---
 
 # Agentfile Dev
@@ -14,6 +14,8 @@ description: |
 - 默认用可边用边改的本地运行方式：macOS arm64 用 `task electron:quickdev`，Windows amd64 用 `task electron:winquickdev`，其他平台用 `task dev`。
 - 先检查是否已经启动，避免重复开多个 dev server。
 - 不执行 `task package`，除非用户明确要构建安装包。
+- `http://localhost:5173/` 只是 Electron renderer 的 Vite dev server，不是用户应该打开的网页；真正的界面在 Agentfile Electron 窗口里。
+- Agentfile 按可持续编辑的本地应用处理，不在用户可见文案里区分发布渠道标签。
 - 数据/配置目录按平台隔离：
   - macOS data: `~/Library/Application Support/waveterm2-dev`
   - Windows data: `%LOCALAPPDATA%\waveterm2-dev\Data`
@@ -90,7 +92,7 @@ powershell -ExecutionPolicy Bypass -File scripts/agentfile-dev.ps1 run
 
 ## 更新规则
 
-用户说“更新测试版”时：
+用户说“更新 Agentfile”或“更新本地环境”时：
 
 1. 先 `git status --short`。
 2. 工作区干净才 `git pull --ff-only`。

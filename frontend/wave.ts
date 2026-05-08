@@ -47,21 +47,6 @@ let savedInitOpts: WaveInitOpts = null;
 let waveRuntimeReady = false;
 const pendingFileWindowRequests: FileWindowOpenRequest[] = [];
 
-function showStartupError(message: string) {
-    document.body.style.visibility = null;
-    document.body.style.opacity = null;
-    document.body.classList.remove("is-transparent");
-    document.body.innerHTML = `
-        <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b1220;color:#e5e7eb;font-family:ui-sans-serif,system-ui,sans-serif;padding:32px;">
-            <div style="max-width:720px;width:100%;background:#111827;border:1px solid #374151;border-radius:16px;padding:24px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.35);">
-                <div style="font-size:28px;font-weight:700;margin-bottom:8px;">Agentfile 启动失败</div>
-                <div style="font-size:15px;line-height:1.7;color:#cbd5e1;">${message}</div>
-                <div style="margin-top:18px;font-size:13px;color:#94a3b8;">建议先重启开发窗口；如果仍然出现，再继续看 preload / main 侧日志。</div>
-            </div>
-        </div>
-    `;
-}
-
 (window as any).WOS = WOS;
 (window as any).globalStore = globalStore;
 (window as any).globalAtoms = atoms;
@@ -128,7 +113,7 @@ function flushPendingFileWindowRequests() {
 async function initBare() {
     const nativeApi = (window as any).api;
     if (!nativeApi?.onWaveInit) {
-        showStartupError("桌面桥接没有加载，界面已进入降级错误页，避免继续白屏。");
+        console.error("Agentfile preload bridge is not available; renderer URL should be opened by Electron.");
         return;
     }
     getApi().sendLog("Init Bare");
