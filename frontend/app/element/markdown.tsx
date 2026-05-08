@@ -403,7 +403,7 @@ const Markdown = ({
     const contentsOsRef = useRef<OverlayScrollbarsComponentRef>(null);
     const [focusedHeading, setFocusedHeading] = useState<string>(null);
     const [renderProfile, setRenderProfile] = useState({
-        appleStyle: false,
+        appleStyle: resolveOpts != null,
         appleStyleSettings: DefaultAppleStyleSettings,
     } as MarkdownRenderProfile);
 

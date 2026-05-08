@@ -468,13 +468,13 @@ export async function getMarkdownRenderProfile(resolveOpts?: MarkdownResolveOpts
                 const vaultConfig = await findObsidianVaultConfig(resolveOpts);
                 if (vaultConfig == null) {
                     return {
-                        appleStyle: false,
+                        appleStyle: true,
                         appleStyleSettings: DefaultAppleStyleSettings,
                     };
                 }
                 const appleStyleSettings = await getObsidianAppleStyleSettings(vaultConfig, resolveOpts);
                 return {
-                    appleStyle: appleStyleSettings != null,
+                    appleStyle: true,
                     appleStyleSettings: appleStyleSettings ?? DefaultAppleStyleSettings,
                 };
             })()
