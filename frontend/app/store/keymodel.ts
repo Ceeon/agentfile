@@ -148,6 +148,39 @@ function genericClose() {
     fireAndForget(layoutModel.closeFocusedNode.bind(layoutModel));
 }
 
+function activeElementWantsNativeUndo(e: WaveKeyboardEvent): boolean {
+    const activeElem = document.activeElement;
+    if (activeElem == null || !(activeElem instanceof HTMLElement)) {
+        return false;
+    }
+    if (activeElem.classList.contains("dummy-focus") || activeElem.classList.contains("dummy")) {
+        return false;
+    }
+    const isEditableElement =
+        activeElem.tagName === "INPUT" || activeElem.tagName === "TEXTAREA" || activeElem.contentEditable === "true";
+    return isEditableElement && keyutil.isInputEvent(e);
+}
+
+function focusedBlockIsTerminal(): boolean {
+    const blockId = getFocusedBlockId();
+    if (!blockId) {
+        return false;
+    }
+    const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", blockId));
+    const blockData = globalStore.get(blockAtom);
+    return blockData?.meta?.view === "term";
+}
+
+function undoLastUserAction(e: WaveKeyboardEvent): boolean {
+    if (activeElementWantsNativeUndo(e)) {
+        return false;
+    }
+    if (keyutil.checkKeyPressed(e, "Ctrl:z") && focusedBlockIsTerminal()) {
+        return false;
+    }
+    return runLastUndoAction("close-block");
+}
+
 function handleRenameCurrentTab() {
     const tabId = globalStore.get(atoms.staticTabId);
     if (!tabId) {
@@ -432,9 +465,9 @@ function registerGlobalKeys() {
         simpleCloseStaticTab();
         return true;
     });
-    globalKeyMap.set("Cmd:Shift:t", () => {
-        return runLastUndoAction("close-block");
-    });
+    globalKeyMap.set("Cmd:z", undoLastUserAction);
+    globalKeyMap.set("Ctrl:z", undoLastUserAction);
+    globalKeyMap.set("Cmd:Shift:t", undoLastUserAction);
     globalKeyMap.set("Ctrl:Shift:ArrowUp", () => {
         switchBlockInDirection(NavigateDirection.Up);
         return true;
