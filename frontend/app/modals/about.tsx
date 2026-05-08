@@ -34,7 +34,7 @@ const AboutModal = ({}: AboutModalProps) => {
                 </div>
                 <div className="flex flex-col items-center gap-3 self-stretch w-full text-center">
                     <div className="text-sm leading-5 text-secondary">
-                        Maintained by Chengfeng / Ceeon
+                        Agentfile 由 Chengfeng 维护
                         <br />
                         小红书：AI产品自由 / 1051267243
                     </div>

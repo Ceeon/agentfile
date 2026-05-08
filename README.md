@@ -67,7 +67,9 @@ The skill documents the expected dev data paths, platform-specific commands, and
 
 ## Maintainer And Contact
 
-Agentfile is maintained by Chengfeng / Ceeon.
+Agentfile is maintained by Chengfeng. The project repository is hosted under Ceeon.
+
+Agentfile 由 Chengfeng 维护。
 
 - GitHub project: https://github.com/Ceeon/agentfile
 - X / Twitter: https://x.com/chengfeng240928
