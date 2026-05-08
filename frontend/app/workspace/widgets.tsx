@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Tooltip } from "@/app/element/tooltip";
+import { modalsModel } from "@/app/store/modalmodel";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { atoms, createBlock, isDev } from "@/store/global";
+import { atoms, createBlock } from "@/store/global";
 import { fireAndForget, isBlank, makeIconClass } from "@/util/util";
 import {
     FloatingPortal,
@@ -303,6 +304,10 @@ const Widgets = memo(() => {
     const settingsButtonRef = useRef<HTMLDivElement>(null);
     const showAppsButton = false;
 
+    const openMaintainerInfo = () => {
+        modalsModel.pushModal("AboutModal");
+    };
+
     const checkModeNeeded = useCallback(() => {
         if (!containerRef.current || !measurementRef.current) return;
 
@@ -399,6 +404,16 @@ const Widgets = memo(() => {
                                 </div>
                             ) : null}
                             <div
+                                className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                                onClick={openMaintainerInfo}
+                            >
+                                <Tooltip content="维护者：成峰" placement="left">
+                                    <div>
+                                        <i className={makeIconClass("user", true)}></i>
+                                    </div>
+                                </Tooltip>
+                            </div>
+                            <div
                                 ref={settingsButtonRef}
                                 className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-sm overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                                 onClick={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -438,6 +453,23 @@ const Widgets = memo(() => {
                             </div>
                         ) : null}
                         <div
+                            className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
+                            onClick={openMaintainerInfo}
+                        >
+                            <Tooltip content="维护者：成峰" placement="left">
+                                <div className="flex flex-col items-center w-full">
+                                    <div>
+                                        <i className={makeIconClass("user", true)}></i>
+                                    </div>
+                                    {mode === "normal" && (
+                                        <div className="text-xxs mt-0.5 w-full px-0.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                                            成峰
+                                        </div>
+                                    )}
+                                </div>
+                            </Tooltip>
+                        </div>
+                        <div
                             ref={settingsButtonRef}
                             className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-secondary text-lg overflow-hidden rounded-sm hover:bg-hoverbg hover:text-white cursor-pointer"
                             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -474,6 +506,12 @@ const Widgets = memo(() => {
                     <Widget key={`measurement-widget-${idx}`} widget={data} mode="normal" />
                 ))}
                 <div className="flex-grow" />
+                <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
+                    <div>
+                        <i className={makeIconClass("user", true)}></i>
+                    </div>
+                    <div className="text-xxs mt-0.5 w-full px-0.5 text-center">成峰</div>
+                </div>
                 <div className="flex flex-col justify-center items-center w-full py-1.5 pr-0.5 text-lg">
                     <div>
                         <i className={makeIconClass("gear", true)}></i>

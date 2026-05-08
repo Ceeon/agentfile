@@ -94,6 +94,20 @@ Bug 修复：
 - 数据目录
 - 配置目录
 
+### 9. 维护者归属与联系入口
+
+**文件**:
+- `README.md`
+- `frontend/app/modals/about.tsx`
+- `frontend/app/workspace/widgets.tsx`
+- `public/contact/wechat-search-contact.png`
+
+新增内容：
+- README 增加 Maintainer And Contact，包含 GitHub、X、小红书号、微信搜索二维码
+- About 弹窗增加维护者信息、联系方式、Apache-2.0 协议入口和上游 Wave 归属说明
+- 左侧工具栏底部增加克制的“成峰”维护者入口，点击打开 About
+- 保留 Apache-2.0 / NOTICE / 上游版权说明，不把联系信息写进协议文件
+
 ---
 
 ## 样式修改

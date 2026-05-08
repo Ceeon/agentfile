@@ -65,6 +65,21 @@ Agents working in this repository should use the project skill when starting, di
 
 The skill documents the expected dev data paths, platform-specific commands, and the rule that `localhost:5173` is an internal renderer service rather than a user-facing website.
 
+## Maintainer And Contact
+
+Agentfile is maintained by Chengfeng / Ceeon.
+
+- GitHub project: https://github.com/Ceeon/agentfile
+- X / Twitter: https://x.com/chengfeng240928
+- Xiaohongshu: `AI产品自由` / `1051267243`
+- WeChat search: `AI产品自由`
+
+For bugs and feature requests, use GitHub Issues when possible. For collaboration, feedback, or broader discussion, use the social links above.
+
+<p>
+  <img alt="WeChat search QR for AI产品自由" src="./public/contact/wechat-search-contact.png" width="420">
+</p>
+
 ## Architecture
 
 Agentfile keeps Wave Terminal's Electron + Go architecture:
