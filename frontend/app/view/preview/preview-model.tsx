@@ -498,16 +498,16 @@ export class PreviewModel implements ViewModel {
                         onClick: () => {},
                     });
                 }
-                if (!isMarkdownFile && canPreview) {
+                if (canPreview) {
                     viewTextChildren.push({
                         elemtype: "textbutton",
-                        text: "查看",
+                        text: isMarkdownFile ? "预览" : "查看",
                         className: "grey rounded-[4px] !py-[2px] !px-[10px] text-[11px] font-[500]",
                         onClick: () => fireAndForget(() => this.setEditMode(false)),
                     });
                 }
             }
-            if (!isMarkdownFile && !isEditingView && canPreview) {
+            if (!isEditingView && canPreview) {
                 viewTextChildren.push({
                     elemtype: "textbutton",
                     text: "编辑",
@@ -843,7 +843,10 @@ export class PreviewModel implements ViewModel {
             return { specializedView: "csv" };
         }
         if (isMarkdownLike(mimeType)) {
-            return { specializedView: "codeedit" };
+            if (editMode) {
+                return { specializedView: "codeedit" };
+            }
+            return { specializedView: "markdown" };
         }
         if (isTextFile(mimeType) || fileInfo.size == 0) {
             return { specializedView: "codeedit" };
@@ -1070,7 +1073,7 @@ export class PreviewModel implements ViewModel {
         const loadableSV = globalStore.get(this.loadableSpecializedView);
         if (loadableSV.state === "hasData") {
             const specializedView = loadableSV.data.specializedView;
-            if (specializedView === "codeedit" || specializedView === "csv") {
+            if (specializedView === "codeedit" || specializedView === "csv" || specializedView === "markdown") {
                 fireAndForget(() => this.refreshFileContent());
                 return;
             }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { CenteredDiv } from "@/app/element/quickelems";
+import { Markdown } from "@/element/markdown";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { waveEventSubscribe } from "@/app/store/wps";
@@ -28,6 +29,7 @@ const FileRefreshFallbackIntervalMs = 1500;
 const SpecializedViewMap: { [view: string]: ({ model }: SpecializedViewProps) => React.JSX.Element } = {
     streaming: StreamingPreview,
     codeedit: CodeEditPreview,
+    markdown: MarkdownFilePreview,
     csv: CSVViewPreview,
     directory: DirectoryPreview,
 };
@@ -37,13 +39,38 @@ function canPreview(mimeType: string): boolean {
         return false;
     }
     const normalizedMimeType = mimeType.toLowerCase();
-    return normalizedMimeType.startsWith("text/csv");
+    return (
+        normalizedMimeType.startsWith("text/csv") ||
+        normalizedMimeType.includes("markdown") ||
+        normalizedMimeType.includes("mdx")
+    );
 }
 
 function CSVViewPreview({ model, parentRef }: SpecializedViewProps) {
     const fileContent = useAtomValue(model.fileContent);
     const fileName = useAtomValue(model.statFilePath);
     return <CSVView parentRef={parentRef} readonly={true} content={fileContent} filename={fileName} />;
+}
+
+function MarkdownFilePreview({ model }: SpecializedViewProps) {
+    const fileContent = useAtomValue(model.fileContent);
+    const fileInfo = useAtomValue(model.statFile);
+    const connName = useAtomValue(model.connectionImmediate);
+    const filePath = fileInfo?.path ?? fileInfo?.name ?? "";
+    const baseDir = fileInfo?.dir ?? "";
+
+    return (
+        <Markdown
+            text={fileContent}
+            resolveOpts={{ connName, baseDir }}
+            className="preview-markdown-shell"
+            contentClassName="preview-markdown-document"
+            frontmatterMode="card"
+            scrollStateKey={filePath}
+            initialScrollTop={model.getPreviewScrollTop(filePath)}
+            onScrollTopChange={(scrollTop) => model.setPreviewScrollTop(filePath, scrollTop)}
+        />
+    );
 }
 
 function getFileRefreshSignature(fileInfo: FileInfo | null | undefined): string {

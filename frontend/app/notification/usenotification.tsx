@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { atoms, getApi } from "@/store/global";
+import { runUndoAction } from "@/store/undomodel";
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useState } from "react";
 
-const notificationActions: { [key: string]: () => void } = {
+const notificationActions: { [key: string]: (notificationId: string) => void } = {
     installUpdate: () => {
         getApi().installAppUpdate();
+    },
+    undoCloseBlock: (notificationId: string) => {
+        runUndoAction(notificationId);
     },
     // Add other action functions here
 };
@@ -67,7 +71,7 @@ export function useNotification() {
             e.stopPropagation();
             const actionFn = notificationActions[action.actionKey];
             if (actionFn) {
-                actionFn();
+                actionFn(id);
                 removeNotification(id);
             } else {
                 console.warn(`No action found for key: ${action.actionKey}`);

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { FocusManager } from "@/app/store/focusManager";
-import { getSettingsKeyAtom } from "@/app/store/global";
+import { getSettingsKeyAtom, pushNotification, removeNotificationById } from "@/app/store/global";
 import { BlockService } from "@/app/store/services";
+import { pushUndoAction, removeUndoAction } from "@/app/store/undomodel";
 import { atomWithThrottle, boundNumber, fireAndForget } from "@/util/util";
 import { Atom, atom, Getter, PrimitiveAtom, Setter } from "jotai";
 import { splitAtom } from "jotai/utils";
@@ -71,6 +72,7 @@ interface ResizeContext {
 const DefaultGapSizePx = 3;
 const MinNodeSizePx = 40;
 const DefaultAnimationTimeS = 0.15;
+const ClosedBlockUndoWindowMs = 10000;
 
 export class LayoutModel {
     /**
@@ -231,6 +233,7 @@ export class LayoutModel {
      * A context used by the resize handles to keep track of precomputed values for the current resize operation.
      */
     private resizeContext?: ResizeContext;
+    private pendingClosedBlockIds: Set<string>;
     /**
      * True if a resize handle is currently being dragged or the whole TileLayout container is being resized.
      */
@@ -265,6 +268,7 @@ export class LayoutModel {
         this.persistDebounceTimer = null;
         this.processedActionIds = new Set();
         this.isProcessingBackendActions = false;
+        this.pendingClosedBlockIds = new Set();
 
         this.waveObjectAtom = getLayoutStateAtomFromTab(tabAtom, getter);
 
@@ -388,6 +392,69 @@ export class LayoutModel {
         }
     }
 
+    private scheduleClosedNodeDelete(nodeToDelete: LayoutNode) {
+        const blockId = nodeToDelete?.data?.blockId;
+        if (!blockId) {
+            return;
+        }
+
+        const undoActionId = `undo-close-block:${blockId}:${Date.now()}`;
+        const closedNode = structuredClone(nodeToDelete);
+        let pending = true;
+        const finalizeDelete = async () => {
+            if (!pending) {
+                return;
+            }
+            pending = false;
+            this.pendingClosedBlockIds.delete(blockId);
+            removeUndoAction(undoActionId);
+            removeNotificationById(undoActionId);
+            await this.onNodeDelete?.(closedNode.data);
+        };
+        const deleteTimer = window.setTimeout(() => {
+            fireAndForget(finalizeDelete);
+        }, ClosedBlockUndoWindowMs);
+
+        this.pendingClosedBlockIds.add(blockId);
+        pushUndoAction({
+            id: undoActionId,
+            kind: "close-block",
+            expiresAt: Date.now() + ClosedBlockUndoWindowMs,
+            run: () => {
+                if (!pending) {
+                    return;
+                }
+                pending = false;
+                window.clearTimeout(deleteTimer);
+                this.pendingClosedBlockIds.delete(blockId);
+                removeNotificationById(undoActionId);
+                this.treeReducer({
+                    type: LayoutTreeActionType.InsertNode,
+                    node: closedNode,
+                    focused: true,
+                    magnified: false,
+                });
+                FocusManager.getInstance().requestNodeFocus();
+            },
+        });
+        pushNotification({
+            id: undoActionId,
+            icon: "rotate-left",
+            title: "区块已关闭",
+            message: "可以撤销本次关闭。",
+            timestamp: new Date().toLocaleString(),
+            expiration: Date.now() + ClosedBlockUndoWindowMs,
+            type: "info",
+            actions: [
+                {
+                    label: "撤销",
+                    actionKey: "undoCloseBlock",
+                    color: "grey",
+                },
+            ],
+        });
+    }
+
     private async processPendingBackendActions() {
         if (this.isProcessingBackendActions) return;
         this.isProcessingBackendActions = true;
@@ -433,6 +500,9 @@ export class LayoutModel {
         });
 
         for (const blockId of tab.blockids || []) {
+            if (this.pendingClosedBlockIds.has(blockId)) {
+                continue;
+            }
             if (!layoutBlockIds.has(blockId)) {
                 console.log("Cleaning up orphaned block:", blockId);
                 if (this.onNodeDelete) {
@@ -1306,7 +1376,7 @@ export class LayoutModel {
                 this.updateTree(false);
                 this.setter(this.localTreeStateAtom, { ...this.treeState });
                 this.persistToBackend();
-                await this.onNodeDelete?.(ephemeralNode.data);
+                this.scheduleClosedNodeDelete(ephemeralNode);
                 return;
             }
             console.error("unable to close node, cannot find it in tree", nodeId);
@@ -1320,7 +1390,7 @@ export class LayoutModel {
             nodeId: nodeId,
         };
         this.treeReducer(deleteAction);
-        await this.onNodeDelete?.(nodeToDelete.data);
+        this.scheduleClosedNodeDelete(nodeToDelete);
     }
 
     /**

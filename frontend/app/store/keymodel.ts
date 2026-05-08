@@ -27,6 +27,7 @@ import { CHORD_TIMEOUT } from "@/util/sharedconst";
 import { fireAndForget } from "@/util/util";
 import * as jotai from "jotai";
 import { modalsModel } from "./modalmodel";
+import { runLastUndoAction } from "./undomodel";
 
 type KeyHandler = (event: WaveKeyboardEvent) => boolean;
 
@@ -430,6 +431,9 @@ function registerGlobalKeys() {
     globalKeyMap.set("Cmd:Shift:w", () => {
         simpleCloseStaticTab();
         return true;
+    });
+    globalKeyMap.set("Cmd:Shift:t", () => {
+        return runLastUndoAction("close-block");
     });
     globalKeyMap.set("Ctrl:Shift:ArrowUp", () => {
         switchBlockInDirection(NavigateDirection.Up);
