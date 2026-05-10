@@ -184,6 +184,14 @@ function isMarkdownLike(mimeType: string): boolean {
     return normalizedMimeType.includes("markdown") || normalizedMimeType.includes("mdx");
 }
 
+function isHtmlLike(mimeType: string): boolean {
+    if (mimeType == null) {
+        return false;
+    }
+    const normalizedMimeType = mimeType.toLowerCase().split(";")[0].trim();
+    return normalizedMimeType === "text/html" || normalizedMimeType === "application/xhtml+xml";
+}
+
 function inferMarkdownMimeType(fileInfo: FileInfo): string | null {
     const filePath = (fileInfo?.path ?? fileInfo?.name ?? "").toLowerCase();
     if (!filePath) {
@@ -222,6 +230,8 @@ function iconForFile(mimeType: string): string {
         return "headphones";
     } else if (isMarkdownLike(mimeType)) {
         return "file-lines";
+    } else if (isHtmlLike(mimeType)) {
+        return "file-code";
     } else if (mimeType == "text/csv") {
         return "file-csv";
     } else if (
@@ -848,6 +858,12 @@ export class PreviewModel implements ViewModel {
             }
             return { specializedView: "markdown" };
         }
+        if (isHtmlLike(mimeType)) {
+            if (editMode) {
+                return { specializedView: "codeedit" };
+            }
+            return { specializedView: "html" };
+        }
         if (isTextFile(mimeType) || fileInfo.size == 0) {
             return { specializedView: "codeedit" };
         }
@@ -1073,7 +1089,12 @@ export class PreviewModel implements ViewModel {
         const loadableSV = globalStore.get(this.loadableSpecializedView);
         if (loadableSV.state === "hasData") {
             const specializedView = loadableSV.data.specializedView;
-            if (specializedView === "codeedit" || specializedView === "csv" || specializedView === "markdown") {
+            if (
+                specializedView === "codeedit" ||
+                specializedView === "csv" ||
+                specializedView === "markdown" ||
+                specializedView === "html"
+            ) {
                 fireAndForget(() => this.refreshFileContent());
                 return;
             }

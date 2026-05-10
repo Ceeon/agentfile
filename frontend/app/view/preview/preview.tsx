@@ -3,6 +3,7 @@
 
 import { CenteredDiv } from "@/app/element/quickelems";
 import { Markdown } from "@/element/markdown";
+import { resolveRemoteFile, resolveSrcSet } from "@/app/element/markdown-util";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { waveEventSubscribe } from "@/app/store/wps";
@@ -30,6 +31,7 @@ const SpecializedViewMap: { [view: string]: ({ model }: SpecializedViewProps) =>
     streaming: StreamingPreview,
     codeedit: CodeEditPreview,
     markdown: MarkdownFilePreview,
+    html: HtmlFilePreview,
     csv: CSVViewPreview,
     directory: DirectoryPreview,
 };
@@ -38,9 +40,11 @@ function canPreview(mimeType: string): boolean {
     if (mimeType == null) {
         return false;
     }
-    const normalizedMimeType = mimeType.toLowerCase();
+    const normalizedMimeType = mimeType.toLowerCase().split(";")[0].trim();
     return (
         normalizedMimeType.startsWith("text/csv") ||
+        normalizedMimeType === "text/html" ||
+        normalizedMimeType === "application/xhtml+xml" ||
         normalizedMimeType.includes("markdown") ||
         normalizedMimeType.includes("mdx")
     );
@@ -69,6 +73,101 @@ function MarkdownFilePreview({ model }: SpecializedViewProps) {
             scrollStateKey={filePath}
             initialScrollTop={model.getPreviewScrollTop(filePath)}
             onScrollTopChange={(scrollTop) => model.setPreviewScrollTop(filePath, scrollTop)}
+        />
+    );
+}
+
+const HtmlUrlAttrSelectors = [
+    { selector: "img[src], audio[src], video[src], source[src], track[src], embed[src]", attr: "src" },
+    { selector: "object[data]", attr: "data" },
+    { selector: "link[href]", attr: "href" },
+    { selector: "video[poster]", attr: "poster" },
+] as const;
+
+function shouldResolveHtmlAssetUrl(value: string | null): value is string {
+    const trimmed = value?.trim() ?? "";
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) {
+        return false;
+    }
+    if (/^(https?:|data:|blob:|mailto:|tel:|javascript:|vbscript:)/i.test(trimmed)) {
+        return false;
+    }
+    return true;
+}
+
+async function resolveHtmlPreviewSrcDoc(html: string, resolveOpts: MarkdownResolveOpts): Promise<string> {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html ?? "", "text/html");
+    const resolveTasks: Promise<void>[] = [];
+
+    for (const { selector, attr } of HtmlUrlAttrSelectors) {
+        doc.querySelectorAll(selector).forEach((elem) => {
+            const rawValue = elem.getAttribute(attr);
+            if (!shouldResolveHtmlAssetUrl(rawValue)) {
+                return;
+            }
+            resolveTasks.push(
+                resolveRemoteFile(rawValue, resolveOpts).then((resolved) => {
+                    if (resolved) {
+                        elem.setAttribute(attr, resolved);
+                    }
+                })
+            );
+        });
+    }
+
+    doc.querySelectorAll("img[srcset], source[srcset]").forEach((elem) => {
+        const rawSrcSet = elem.getAttribute("srcset");
+        if (!rawSrcSet || /(^|,\s*)(https?:|data:|\/\/)/i.test(rawSrcSet)) {
+            return;
+        }
+        resolveTasks.push(
+            resolveSrcSet(rawSrcSet, resolveOpts).then((resolved) => {
+                if (resolved) {
+                    elem.setAttribute("srcset", resolved);
+                }
+            })
+        );
+    });
+
+    await Promise.all(resolveTasks);
+    return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
+function HtmlFilePreview({ model }: SpecializedViewProps) {
+    const fileContent = useAtomValue(model.fileContent);
+    const fileInfo = useAtomValue(model.statFile);
+    const connName = useAtomValue(model.connectionImmediate);
+    const filePath = fileInfo?.path ?? fileInfo?.name ?? "";
+    const baseDir = fileInfo?.dir ?? "";
+    const [srcDoc, setSrcDoc] = useState(fileContent ?? "");
+
+    useEffect(() => {
+        let disposed = false;
+        resolveHtmlPreviewSrcDoc(fileContent ?? "", { connName, baseDir })
+            .then((resolved) => {
+                if (!disposed) {
+                    setSrcDoc(resolved);
+                }
+            })
+            .catch(() => {
+                if (!disposed) {
+                    setSrcDoc(fileContent ?? "");
+                }
+            });
+        return () => {
+            disposed = true;
+        };
+    }, [fileContent, connName, baseDir]);
+
+    return (
+        <iframe
+            className="h-full w-full border-0 bg-white"
+            name="htmlview"
+            sandbox=""
+            referrerPolicy="no-referrer"
+            srcDoc={srcDoc}
+            title={filePath || "HTML Preview"}
         />
     );
 }
