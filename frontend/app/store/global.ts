@@ -77,6 +77,7 @@ const fallbackApi: ElectronApi = {
     getZoomFactor: () => 1,
     openNewWindow: noop,
     openFileInNewTab: noop,
+    openFileInNewWindow: noop,
     registerGlobalWebviewKeys: noop,
     showWorkspaceAppMenu: noop,
     showContextMenu: noop,

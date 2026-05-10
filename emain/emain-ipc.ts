@@ -18,7 +18,13 @@ import { callWithOriginalXdgCurrentDesktopAsync, unamePlatform } from "./emain-p
 import { getWaveTabViewByWebContentsId } from "./emain-tabview";
 import { handleCtrlShiftState } from "./emain-util";
 import { getWaveVersion } from "./emain-wavesrv";
-import { createNewWaveWindow, focusedWaveWindow, getWaveWindowByWebContentsId, openFileInNewTab } from "./emain-window";
+import {
+    createNewWaveWindow,
+    focusedWaveWindow,
+    getWaveWindowByWebContentsId,
+    openFileInNewTab,
+    openFileInNewWindow,
+} from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
 
 const electronApp = electron.app;
@@ -1390,6 +1396,9 @@ export function initIpcHandlers() {
     electron.ipcMain.on("open-new-window", () => fireAndForget(createNewWaveWindow));
     electron.ipcMain.on("open-file-in-new-tab", (event, request: FileWindowOpenRequest) =>
         fireAndForget(() => openFileInNewTab(event.sender.id, request))
+    );
+    electron.ipcMain.on("open-file-in-new-window", (_event, request: FileWindowOpenRequest) =>
+        fireAndForget(() => openFileInNewWindow(request))
     );
 
     electron.ipcMain.on("do-refresh", (event) => {

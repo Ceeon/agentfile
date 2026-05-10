@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld("api", {
     openNewWindow: () => ipcRenderer.send("open-new-window"),
     openFileInNewTab: (filePath: string, connection?: string) =>
         ipcRenderer.send("open-file-in-new-tab", { filePath, connection }),
+    openFileInNewWindow: (filePath: string, connection?: string) =>
+        ipcRenderer.send("open-file-in-new-window", { filePath, connection }),
     registerGlobalWebviewKeys: (_keys: string[]) => {},
     showWorkspaceAppMenu: (workspaceId) => ipcRenderer.send("workspace-appmenu-show", workspaceId),
     showContextMenu: (workspaceId, menu) => ipcRenderer.send("contextmenu-show", workspaceId, menu),

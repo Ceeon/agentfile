@@ -12,6 +12,7 @@ import {
     type MarkdownRenderProfile,
     preprocessMarkdown,
     resolveRemoteFile,
+    resolveRemoteFileInfo,
     resolveSrcSet,
     transformBlocks,
 } from "@/app/element/markdown-util";
@@ -30,7 +31,7 @@ import RemarkFlexibleToc, { TocItem } from "remark-flexible-toc";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import React from "react";
-import { openLink } from "../store/global";
+import { getApi, openLink } from "../store/global";
 import { IconButton } from "./iconbutton";
 import "./markdown.scss";
 
@@ -48,18 +49,44 @@ const initializeMermaid = async () => {
 
 const Link = ({
     setFocusedHeading,
+    resolveOpts,
     props,
 }: {
     props: React.AnchorHTMLAttributes<HTMLAnchorElement>;
     setFocusedHeading: (href: string) => void;
+    resolveOpts?: MarkdownResolveOpts;
 }) => {
-    const onClick = (e: React.MouseEvent) => {
-        e.preventDefault();
-        if (props.href.startsWith("#")) {
-            setFocusedHeading(props.href);
-        } else {
-            openLink(props.href);
+    const onClick = async (e: React.MouseEvent) => {
+        const href = props.href ?? "";
+        if (!href) {
+            return;
         }
+        e.preventDefault();
+        if (href.startsWith("#")) {
+            setFocusedHeading(href);
+            return;
+        }
+        if (isBlockedMarkdownHref(href)) {
+            return;
+        }
+        if (isExternalMarkdownHref(href) || resolveOpts == null) {
+            openLink(href);
+            return;
+        }
+
+        const fileRef = parseMarkdownFileHref(href);
+        if (fileRef.connName != null) {
+            getApi().openFileInNewWindow(fileRef.path, fileRef.connName);
+            return;
+        }
+
+        const fileInfo = await resolveRemoteFileInfo(fileRef.path, resolveOpts);
+        if (fileInfo?.path && !fileInfo.notfound) {
+            getApi().openFileInNewWindow(fileInfo.path, resolveOpts.connName);
+            return;
+        }
+
+        openLink(href);
     };
     return (
         <a href={props.href} onClick={onClick}>
@@ -67,6 +94,62 @@ const Link = ({
         </a>
     );
 };
+
+function isExternalMarkdownHref(href: string): boolean {
+    const trimmed = href.trim();
+    if (/^\/\//.test(trimmed)) {
+        return true;
+    }
+    const scheme = getMarkdownHrefScheme(trimmed);
+    return scheme != null && scheme !== "file" && scheme !== "wsh";
+}
+
+function isBlockedMarkdownHref(href: string): boolean {
+    return /^(javascript|vbscript|data):/i.test(href.trim());
+}
+
+function getMarkdownHrefScheme(href: string): string | null {
+    const match = href.match(/^([a-zA-Z][a-zA-Z\d+.-]*):/);
+    return match?.[1]?.toLowerCase() ?? null;
+}
+
+function parseMarkdownFileHref(href: string): { path: string; connName?: string } {
+    let normalized = href.trim();
+    const hashIdx = normalized.indexOf("#");
+    if (hashIdx > 0) {
+        normalized = normalized.slice(0, hashIdx);
+    }
+    if (/^file:\/\//i.test(normalized)) {
+        try {
+            return { path: decodeURIComponent(new URL(normalized).pathname) };
+        } catch {
+            return { path: normalized.replace(/^file:\/\//i, "") };
+        }
+    }
+    if (/^wsh:\/\//i.test(normalized)) {
+        try {
+            const url = new URL(normalized);
+            return {
+                path: normalizeWshUrlPath(url.pathname),
+                connName: decodeURIComponent(url.hostname || "local"),
+            };
+        } catch {
+            return { path: normalized.replace(/^wsh:\/\/[^/]+\//i, "") };
+        }
+    }
+    return { path: normalized };
+}
+
+function normalizeWshUrlPath(pathname: string): string {
+    const decodedPathname = decodeURIComponent(pathname);
+    if (decodedPathname.startsWith("//")) {
+        return decodedPathname.slice(1);
+    }
+    if (decodedPathname === "/~" || decodedPathname.startsWith("/~/")) {
+        return decodedPathname.slice(1);
+    }
+    return decodedPathname;
+}
 
 const Heading = ({ props, hnum }: { props: React.HTMLAttributes<HTMLHeadingElement>; hnum: number }) => {
     return (
@@ -495,8 +578,8 @@ const Markdown = ({
     }, [initialScrollTop, scrollStateKey, scrollable]);
 
     const markdownComponents: Partial<Components> & Record<string, any> = {
-        a: (props: React.HTMLAttributes<HTMLAnchorElement>) => (
-            <Link props={props} setFocusedHeading={setFocusedHeading} />
+        a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+            <Link props={props} setFocusedHeading={setFocusedHeading} resolveOpts={resolveOpts} />
         ),
         p: (props: React.HTMLAttributes<HTMLParagraphElement>) => <Paragraph props={props as any} appleStyle={appleStyle} />,
         h1: (props: React.HTMLAttributes<HTMLHeadingElement>) => <Heading props={props} hnum={1} />,

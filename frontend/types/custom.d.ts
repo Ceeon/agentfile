@@ -121,6 +121,7 @@ declare global {
         getZoomFactor: () => number; // get-zoom-factor
         openNewWindow: () => void; // open-new-window
         openFileInNewTab: (filePath: string, connection?: string) => void; // open-file-in-new-tab
+        openFileInNewWindow: (filePath: string, connection?: string) => void; // open-file-in-new-window
         registerGlobalWebviewKeys: (keys: string[]) => void;
         showWorkspaceAppMenu: (workspaceId: string) => void; // workspace-appmenu-show
         showContextMenu: (workspaceId: string, menu: ElectronContextMenuItem[]) => void; // contextmenu-show

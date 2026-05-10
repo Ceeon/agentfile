@@ -862,6 +862,22 @@ export async function openFileInNewTab(webContentsId: number, request: FileWindo
     waveWindow.activeTabView?.webContents.send("open-file-in-current-window", request);
 }
 
+export async function openFileInNewWindow(request: FileWindowRequest) {
+    if (!request?.filePath) {
+        return;
+    }
+    const fullConfig = await RpcApi.GetFullConfigCommand(ElectronWshClient);
+    const waveWindow = await createBrowserWindow(null, fullConfig, {
+        unamePlatform,
+        isPrimaryStartupWindow: false,
+    });
+    if (!waveWindow.activeTabView) {
+        await waveWindow.queueCreateTab();
+    }
+    waveWindow.show();
+    waveWindow.activeTabView?.webContents.send("open-file-in-current-window", request);
+}
+
 export async function relaunchBrowserWindows() {
     console.log("relaunchBrowserWindows");
     setGlobalIsRelaunching(true);
