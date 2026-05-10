@@ -31,7 +31,7 @@ import RemarkFlexibleToc, { TocItem } from "remark-flexible-toc";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import React from "react";
-import { getApi, openLink } from "../store/global";
+import { createBlockAtRightmost, openLink } from "../store/global";
 import { IconButton } from "./iconbutton";
 import "./markdown.scss";
 
@@ -76,13 +76,13 @@ const Link = ({
 
         const fileRef = parseMarkdownFileHref(href);
         if (fileRef.connName != null) {
-            getApi().openFileInNewWindow(fileRef.path, fileRef.connName);
+            await openMarkdownFileInCurrentTab(fileRef.path, fileRef.connName);
             return;
         }
 
         const fileInfo = await resolveRemoteFileInfo(fileRef.path, resolveOpts);
         if (fileInfo?.path && !fileInfo.notfound) {
-            getApi().openFileInNewWindow(fileInfo.path, resolveOpts.connName);
+            await openMarkdownFileInCurrentTab(fileInfo.path, resolveOpts.connName);
             return;
         }
 
@@ -94,6 +94,17 @@ const Link = ({
         </a>
     );
 };
+
+async function openMarkdownFileInCurrentTab(filePath: string, connName?: string | null) {
+    const blockDef: BlockDef = {
+        meta: {
+            view: "preview",
+            file: filePath,
+            connection: connName,
+        },
+    };
+    await createBlockAtRightmost(blockDef);
+}
 
 function isExternalMarkdownHref(href: string): boolean {
     const trimmed = href.trim();

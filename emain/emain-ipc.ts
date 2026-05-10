@@ -23,7 +23,6 @@ import {
     focusedWaveWindow,
     getWaveWindowByWebContentsId,
     openFileInNewTab,
-    openFileInNewWindow,
 } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
 
@@ -1396,9 +1395,6 @@ export function initIpcHandlers() {
     electron.ipcMain.on("open-new-window", () => fireAndForget(createNewWaveWindow));
     electron.ipcMain.on("open-file-in-new-tab", (event, request: FileWindowOpenRequest) =>
         fireAndForget(() => openFileInNewTab(event.sender.id, request))
-    );
-    electron.ipcMain.on("open-file-in-new-window", (_event, request: FileWindowOpenRequest) =>
-        fireAndForget(() => openFileInNewWindow(request))
     );
 
     electron.ipcMain.on("do-refresh", (event) => {
