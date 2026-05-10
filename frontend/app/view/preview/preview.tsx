@@ -3,16 +3,16 @@
 
 import { CenteredDiv } from "@/app/element/quickelems";
 import { Markdown } from "@/element/markdown";
-import { resolveRemoteFile, resolveSrcSet } from "@/app/element/markdown-util";
+import { resolveRemoteFile, resolveRemoteFileInfo, resolveSrcSet } from "@/app/element/markdown-util";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { waveEventSubscribe } from "@/app/store/wps";
 import { BlockHeaderSuggestionControl } from "@/app/suggestion/suggestion";
-import { getApi, globalStore } from "@/store/global";
+import { createBlockAtRightmost, getApi, globalStore, openLink } from "@/store/global";
 import { normalizeDirectoryWatchPath } from "@/util/directorywatchutil";
 import { fireAndForget, isBlank, isLocalConnName, jotaiLoadableValue, makeConnRoute } from "@/util/util";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { CSVView } from "./csvview";
 import { DirectoryPreview } from "./preview-directory";
 import { CodeEditPreview } from "./preview-edit";
@@ -95,6 +95,110 @@ function shouldResolveHtmlAssetUrl(value: string | null): value is string {
     return true;
 }
 
+function getHtmlHrefScheme(href: string): string | null {
+    const match = href.match(/^([a-zA-Z][a-zA-Z\d+.-]*):/);
+    return match?.[1]?.toLowerCase() ?? null;
+}
+
+function isBlockedHtmlHref(href: string): boolean {
+    return /^(javascript|vbscript|data|blob):/i.test(href.trim());
+}
+
+function isExternalHtmlHref(href: string): boolean {
+    const trimmed = href.trim();
+    if (/^\/\//.test(trimmed)) {
+        return true;
+    }
+    const scheme = getHtmlHrefScheme(trimmed);
+    return scheme != null && scheme !== "file" && scheme !== "wsh";
+}
+
+function normalizeWshUrlPath(pathname: string): string {
+    const decodedPathname = decodeURIComponent(pathname);
+    if (decodedPathname.startsWith("//")) {
+        return decodedPathname.slice(1);
+    }
+    if (decodedPathname === "/~" || decodedPathname.startsWith("/~/")) {
+        return decodedPathname.slice(1);
+    }
+    return decodedPathname;
+}
+
+function parseHtmlFileHref(href: string): { path: string; connName?: string } {
+    let normalized = href.trim();
+    const hashIdx = normalized.indexOf("#");
+    if (hashIdx > 0) {
+        normalized = normalized.slice(0, hashIdx);
+    }
+    if (/^file:\/\//i.test(normalized)) {
+        try {
+            return { path: decodeURIComponent(new URL(normalized).pathname) };
+        } catch {
+            return { path: normalized.replace(/^file:\/\//i, "") };
+        }
+    }
+    if (/^wsh:\/\//i.test(normalized)) {
+        try {
+            const url = new URL(normalized);
+            return {
+                path: normalizeWshUrlPath(url.pathname),
+                connName: decodeURIComponent(url.hostname || "local"),
+            };
+        } catch {
+            return { path: normalized.replace(/^wsh:\/\/[^/]+\//i, "") };
+        }
+    }
+    return { path: normalized };
+}
+
+async function openHtmlFileInCurrentTab(filePath: string, connName?: string | null) {
+    const blockDef: BlockDef = {
+        meta: {
+            view: "preview",
+            file: filePath,
+            connection: connName,
+        },
+    };
+    await createBlockAtRightmost(blockDef);
+}
+
+async function resolveHtmlLinkedFileInfo(hrefPath: string, resolveOpts: MarkdownResolveOpts): Promise<FileInfo | null> {
+    const fileInfo = await resolveRemoteFileInfo(hrefPath, resolveOpts);
+    if (fileInfo?.path && !fileInfo.notfound) {
+        return fileInfo;
+    }
+    if (hrefPath.startsWith("/") && !hrefPath.startsWith("//")) {
+        return await resolveRemoteFileInfo(`.${hrefPath}`, resolveOpts);
+    }
+    return null;
+}
+
+async function openHtmlPreviewHref(href: string, resolveOpts: MarkdownResolveOpts) {
+    if (!href || isBlockedHtmlHref(href)) {
+        return;
+    }
+    if (isExternalHtmlHref(href) || resolveOpts == null) {
+        await openLink(href);
+        return;
+    }
+    const fileRef = parseHtmlFileHref(href);
+    if (!fileRef.path) {
+        return;
+    }
+    if (fileRef.connName != null) {
+        await openHtmlFileInCurrentTab(fileRef.path, fileRef.connName);
+        return;
+    }
+    const fileInfo = await resolveHtmlLinkedFileInfo(fileRef.path, resolveOpts);
+    if (fileInfo?.path && !fileInfo.notfound) {
+        await openHtmlFileInCurrentTab(fileInfo.path, resolveOpts.connName);
+        return;
+    }
+    if (/^https?:/i.test(href)) {
+        await openLink(href);
+    }
+}
+
 async function resolveHtmlPreviewSrcDoc(html: string, resolveOpts: MarkdownResolveOpts): Promise<string> {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html ?? "", "text/html");
@@ -140,7 +244,43 @@ function HtmlFilePreview({ model }: SpecializedViewProps) {
     const connName = useAtomValue(model.connectionImmediate);
     const filePath = fileInfo?.path ?? fileInfo?.name ?? "";
     const baseDir = fileInfo?.dir ?? "";
+    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const frameClickCleanupRef = useRef<(() => void) | null>(null);
     const [srcDoc, setSrcDoc] = useState(fileContent ?? "");
+
+    const handleFrameLoad = useCallback(() => {
+        frameClickCleanupRef.current?.();
+        frameClickCleanupRef.current = null;
+        const doc = iframeRef.current?.contentDocument;
+        if (doc == null) {
+            return;
+        }
+        const onClick = (event: MouseEvent) => {
+            const target = event.target as Element | null;
+            const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+            if (anchor == null) {
+                return;
+            }
+            const href = anchor.getAttribute("href")?.trim() ?? "";
+            if (!href) {
+                return;
+            }
+            event.preventDefault();
+            if (href.startsWith("#")) {
+                let targetId = href.slice(1);
+                try {
+                    targetId = decodeURIComponent(targetId);
+                } catch {
+                    // Keep the raw anchor id.
+                }
+                doc.getElementById(targetId)?.scrollIntoView({ block: "start" });
+                return;
+            }
+            fireAndForget(() => openHtmlPreviewHref(href, { connName, baseDir }));
+        };
+        doc.addEventListener("click", onClick);
+        frameClickCleanupRef.current = () => doc.removeEventListener("click", onClick);
+    }, [connName, baseDir]);
 
     useEffect(() => {
         let disposed = false;
@@ -160,14 +300,23 @@ function HtmlFilePreview({ model }: SpecializedViewProps) {
         };
     }, [fileContent, connName, baseDir]);
 
+    useEffect(() => {
+        return () => {
+            frameClickCleanupRef.current?.();
+            frameClickCleanupRef.current = null;
+        };
+    }, []);
+
     return (
         <iframe
+            ref={iframeRef}
             className="h-full w-full border-0 bg-white"
             name="htmlview"
-            sandbox=""
+            sandbox="allow-same-origin"
             referrerPolicy="no-referrer"
             srcDoc={srcDoc}
             title={filePath || "HTML Preview"}
+            onLoad={handleFrameLoad}
         />
     );
 }

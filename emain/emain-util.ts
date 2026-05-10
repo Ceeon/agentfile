@@ -114,14 +114,29 @@ export function shNavHandler(event: Electron.Event<Electron.WebContentsWillNavig
 }
 
 export function shFrameNavHandler(event: Electron.Event<Electron.WebContentsWillFrameNavigateEventParams>) {
-    if (!event.frame?.parent) {
-        // only use this handler to process iframe events (non-iframe events go to shNavHandler)
+    const url = event.url;
+    let frameName = "";
+    try {
+        const frame = event.frame;
+        if (!frame?.parent) {
+            // only use this handler to process iframe events (non-iframe events go to shNavHandler)
+            return;
+        }
+        frameName = frame.name ?? "";
+    } catch (e) {
+        // Electron can dispose an iframe between emitting the event and accessing WebFrameMain.
+        event.preventDefault();
+        console.log("frame navigation canceled, frame was disposed", url);
         return;
     }
-    const url = event.url;
-    console.log(`frame-navigation url=${url} frame=${event.frame.name}`);
+    console.log(`frame-navigation url=${url} frame=${frameName}`);
+    if (frameName === "htmlview") {
+        event.preventDefault();
+        console.log("html preview frame navigation canceled");
+        return;
+    }
     if (
-        event.frame.name == "pdfview" &&
+        frameName == "pdfview" &&
         (url.startsWith("blob:file:///") ||
             url.startsWith(getWebServerEndpoint() + "/wave/stream-file?") ||
             url.startsWith(getWebServerEndpoint() + "/wave/stream-file/") ||
@@ -130,9 +145,9 @@ export function shFrameNavHandler(event: Electron.Event<Electron.WebContentsWill
         // allowed
         return;
     }
-    if (event.frame.name != null && event.frame.name.startsWith("tsunami:")) {
+    if (frameName.startsWith("tsunami:")) {
         // Parse port from frame name: tsunami:[port]:[blockid]
-        const nameParts = event.frame.name.split(":");
+        const nameParts = frameName.split(":");
         const expectedPort = nameParts.length >= 2 ? nameParts[1] : null;
 
         try {
