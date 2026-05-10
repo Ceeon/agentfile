@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { FocusManager } from "@/app/store/focusManager";
-import { getSettingsKeyAtom, pushNotification, removeNotificationById } from "@/app/store/global";
+import { getSettingsKeyAtom } from "@/app/store/global";
 import { BlockService } from "@/app/store/services";
 import { pushUndoAction, removeUndoAction } from "@/app/store/undomodel";
 import { atomWithThrottle, boundNumber, fireAndForget } from "@/util/util";
@@ -408,7 +408,6 @@ export class LayoutModel {
             pending = false;
             this.pendingClosedBlockIds.delete(blockId);
             removeUndoAction(undoActionId);
-            removeNotificationById(undoActionId);
             await this.onNodeDelete?.(closedNode.data);
         };
         const deleteTimer = window.setTimeout(() => {
@@ -427,7 +426,6 @@ export class LayoutModel {
                 pending = false;
                 window.clearTimeout(deleteTimer);
                 this.pendingClosedBlockIds.delete(blockId);
-                removeNotificationById(undoActionId);
                 this.treeReducer({
                     type: LayoutTreeActionType.InsertNode,
                     node: closedNode,
@@ -436,22 +434,6 @@ export class LayoutModel {
                 });
                 FocusManager.getInstance().requestNodeFocus();
             },
-        });
-        pushNotification({
-            id: undoActionId,
-            icon: "rotate-left",
-            title: "区块已关闭",
-            message: "可以撤销本次关闭。",
-            timestamp: new Date().toLocaleString(),
-            expiration: Date.now() + ClosedBlockUndoWindowMs,
-            type: "info",
-            actions: [
-                {
-                    label: "撤销",
-                    actionKey: "undoCloseBlock",
-                    color: "grey",
-                },
-            ],
         });
     }
 
