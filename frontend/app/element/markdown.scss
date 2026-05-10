@@ -368,6 +368,10 @@
 }
 
 .markdown.preview-markdown-shell {
+    .content {
+        padding: 12px 14px;
+    }
+
     .markdown-document.preview-markdown-document {
         width: 100%;
         max-width: none;
