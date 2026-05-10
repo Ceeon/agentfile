@@ -257,7 +257,8 @@ function HtmlFilePreview({ model }: SpecializedViewProps) {
         }
         const onClick = (event: MouseEvent) => {
             const target = event.target as Element | null;
-            const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+            const anchor =
+                typeof target?.closest === "function" ? (target.closest("a[href]") as HTMLAnchorElement | null) : null;
             if (anchor == null) {
                 return;
             }
@@ -278,8 +279,8 @@ function HtmlFilePreview({ model }: SpecializedViewProps) {
             }
             fireAndForget(() => openHtmlPreviewHref(href, { connName, baseDir }));
         };
-        doc.addEventListener("click", onClick);
-        frameClickCleanupRef.current = () => doc.removeEventListener("click", onClick);
+        doc.addEventListener("click", onClick, true);
+        frameClickCleanupRef.current = () => doc.removeEventListener("click", onClick, true);
     }, [connName, baseDir]);
 
     useEffect(() => {
@@ -299,6 +300,11 @@ function HtmlFilePreview({ model }: SpecializedViewProps) {
             disposed = true;
         };
     }, [fileContent, connName, baseDir]);
+
+    useEffect(() => {
+        const timer = window.setTimeout(handleFrameLoad, 0);
+        return () => window.clearTimeout(timer);
+    }, [srcDoc, handleFrameLoad]);
 
     useEffect(() => {
         return () => {
