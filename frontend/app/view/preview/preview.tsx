@@ -569,9 +569,9 @@ function PreviewView({
 
     return (
         <>
-            <div key="fullpreview" className="flex flex-col w-full overflow-hidden scrollbar-hide-until-hover">
+            <div key="fullpreview" className="flex h-full min-h-0 w-full flex-col overflow-hidden scrollbar-hide-until-hover">
                 {errorMsg && <ErrorOverlay errorMsg={errorMsg} resetOverlay={() => setErrorMsg(null)} />}
-                <div ref={contentRef} className="flex-grow overflow-hidden">
+                <div ref={contentRef} className="min-h-0 flex-grow overflow-hidden">
                     <SpecializedView parentRef={contentRef} model={model} />
                 </div>
             </div>
